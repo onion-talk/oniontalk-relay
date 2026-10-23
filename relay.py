@@ -130,8 +130,13 @@ def _load_or_create_node_keypair() -> tuple[Ed25519PrivateKey, str]:
                     format=serialization.PrivateFormat.Raw,
                     encryption_algorithm=serialization.NoEncryption(),
                 )
-                with open(NODE_KEY_FILE, "wb") as f:
+                fd = os.open(NODE_KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "wb") as f:
                     f.write(raw_seed)
+                try:
+                    os.chmod(NODE_KEY_FILE, 0o600)
+                except Exception:
+                    pass
             except Exception:
                 pass
 
@@ -148,15 +153,15 @@ NODE_PRIVATE_KEY, NODE_PUBLIC_KEY_HEX = _load_or_create_node_keypair()
 # App Version Policy & Automatic E2EE Update Notice Injector
 # ---------------------------------------------------------------------------
 MIN_CLIENT_VERSION_CODE = int(os.getenv("MIN_CLIENT_VERSION_CODE", "23"))
-LATEST_CLIENT_VERSION_CODE = int(os.getenv("LATEST_CLIENT_VERSION_CODE", "23"))
-LATEST_CLIENT_VERSION_NAME = os.getenv("LATEST_CLIENT_VERSION_NAME", "1.4.2")
+LATEST_CLIENT_VERSION_CODE = int(os.getenv("LATEST_CLIENT_VERSION_CODE", "27"))
+LATEST_CLIENT_VERSION_NAME = os.getenv("LATEST_CLIENT_VERSION_NAME", "1.4.3")
 UPDATE_PLAY_URL = os.getenv(
     "UPDATE_PLAY_URL",
     "https://play.google.com/store/apps/details?id=org.oniontalk.messenger",
 )
 UPDATE_APK_URL = os.getenv(
     "UPDATE_APK_URL",
-    "https://github.com/onion-talk/oniontalk-demo/releases/download/v1.4.2-demo/OnionTalk-v1.4.2.apk",
+    "https://github.com/onion-talk/oniontalk-demo/releases/download/v1.4.3-demo/OnionTalk-v1.4.3.apk",
 )
 ENFORCE_HARD_UPDATE_CUT = os.getenv("ENFORCE_HARD_UPDATE_CUT", "0") == "1"
 UPDATE_NOTIFIED_FILE = os.getenv("UPDATE_NOTIFIED_FILE", "/tmp/oniontalk_update_notified_v142.json")
@@ -652,11 +657,24 @@ def verify_wire_envelope_signature(sender: str, recipient: str, payload: str) ->
     return False, f"Unauthenticated message payload ({hdr_err})"
 
 
+_peer_ts_lock = threading.Lock()
+_last_peer_ts_ms = 0
+
+def _next_monotonic_peer_ts_ms() -> int:
+    global _last_peer_ts_ms
+    now_ms = int(time.time() * 1000)
+    with _peer_ts_lock:
+        if now_ms > _last_peer_ts_ms:
+            _last_peer_ts_ms = now_ms
+        else:
+            _last_peer_ts_ms += 1
+        return _last_peer_ts_ms
+
 def build_peer_signed_request(method: str, path: str, payload: dict) -> tuple[bytes, dict]:
     """Serializes JSON body and signs it with this relay node's Ed25519 private key."""
     body_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     body_hash = hashlib.sha256(body_bytes).hexdigest()
-    ts_ms = str(int(time.time() * 1000))
+    ts_ms = str(_next_monotonic_peer_ts_ms())
     peer_onion = get_my_onion_domain() or ""
     canonical = f"ONIONTALK_PEER_V2|{method.upper()}|{path}|{peer_onion}|{ts_ms}|{body_hash}".encode("utf-8")
     sig_hex = NODE_PRIVATE_KEY.sign(canonical).hex()

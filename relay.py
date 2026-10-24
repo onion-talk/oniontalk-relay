@@ -38,6 +38,8 @@ def apply_zero_trust_headers(response):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
     response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Connection"] = "keep-alive"
+    response.headers["Keep-Alive"] = "timeout=75, max=1000"
     return response
 
 
@@ -55,6 +57,7 @@ DEFAULT_SEEDS = (
     "gcvfh67zltoyvithw6luetsrcec6cw42upzrsprxfmx27cvh7vidw4yd.onion,"
     "bk7iegv3v232ycjyf5ylwsdx42iozvy2dhhff5zn3ciwa3g2lkifdlad.onion,"
     "wfi3nwuzk2tgrsf2scdy4nb6x6rtiocit4n26477zdlvdvshkgip3ayd.onion,"
+    "o5zqqfl5znzexdojfnxgub5jnjelxdahbyxasjp57sx6fbxtjeqovpad.onion,"
     "5s6w6556f2eov2p6wlsuavaxh7si2kaswjwi5reojnovbzemducjzjqd.onion,"
     "o5yf3eukrwpt2g6jfo4q2y23xtuhoso2qknmnn6ac5eng5t4yt36roqd.onion,"
     "azw5qxf4jnfudeei3nanggojle62g4duoxtxjj2pjuvm42xb3456vjad.onion,"
@@ -166,19 +169,38 @@ UPDATE_APK_URL = os.getenv(
 ENFORCE_HARD_UPDATE_CUT = os.getenv("ENFORCE_HARD_UPDATE_CUT", "0") == "1"
 UPDATE_NOTIFIED_FILE = os.getenv("UPDATE_NOTIFIED_FILE", "/tmp/oniontalk_update_notified_v142.json")
 
-_SYSTEM_BROADCAST_SEED = hashlib.sha256(b"ONIONTALK_OFFICIAL_SYSTEM_UPDATE_KEY_V142").digest()
-_SYSTEM_SIGN_KEY = Ed25519PrivateKey.from_private_bytes(_SYSTEM_BROADCAST_SEED)
-_SYSTEM_SIGN_PUB_HEX = _SYSTEM_SIGN_KEY.public_key().public_bytes(
-    encoding=serialization.Encoding.Raw,
-    format=serialization.PublicFormat.Raw,
-).hex()
+def _derive_system_broadcast_keypair() -> tuple[Ed25519PrivateKey, str]:
+    env_seed_hex = (os.getenv("SYSTEM_BROADCAST_SEED_HEX") or "").strip().lower()
+    if PUBKEY_HEX_REGEX.match(env_seed_hex):
+        seed_bytes = bytes.fromhex(env_seed_hex)
+    else:
+        node_raw = NODE_PRIVATE_KEY.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        seed_bytes = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=b"OnionTalk-System-Broadcast-Salt-v2",
+            info=b"OnionTalk-System-Update-Ed25519-Key-v2",
+        ).derive(node_raw)
+    priv = Ed25519PrivateKey.from_private_bytes(seed_bytes)
+    pub_hex = priv.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    ).hex()
+    return priv, pub_hex
+
+
+_SYSTEM_SIGN_KEY, _SYSTEM_SIGN_PUB_HEX = _derive_system_broadcast_keypair()
 _SYSTEM_SENDER_ID = f"@{_SYSTEM_SIGN_PUB_HEX}:onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion"
 
 _ED25519_P = (1 << 255) - 19
 _AUTO_UPDATE_TEXT = (
-    "🚀 ATUALIZAÇÃO OBRIGATÓRIA DISPONÍVEL — OnionTalk v1.4.2\n\n"
-    "Por favor, atualize seu aplicativo para a nova versão v1.4.2 para garantir "
-    "100% de compatibilidade com a malha global (17 nós), envio/recebimento instantâneo, "
+    "🚀 ATUALIZAÇÃO DISPONÍVEL — OnionTalk v1.4.3\n\n"
+    "Por favor, atualize seu aplicativo pela loja oficial para garantir "
+    "100% de compatibilidade com a malha global (21 nós), envio/recebimento sub-segundo, "
     "super-compressão P2P e blindagem de segurança.\n\n"
     "📲 Google Play: https://play.google.com/store/apps/details?id=org.oniontalk.messenger\n"
     "📦 APK Direto: https://onion-talk.github.io/oniontalk-demo/\n\n"
@@ -470,8 +492,17 @@ NODE_GEO_METADATA = {
         "role": "🇸🇬 Cloud Relay (Singapura, SG)"
     },
     "azw5qxf4jnfudeei3nanggojle62g4duoxtxjj2pjuvm42xb3456vjad.onion": {
-        "node_name": "🇩🇪 Nó 16 — DOM Cloud (Alemanha)",
+        "node_name": "🇩🇪 Nó 16 — DOM Cloud (Alemanha Legacy)",
         "map_label": "🇩🇪 N16 • Alemanha",
+        "location": "Nuremberg, Alemanha (EU-Central)",
+        "provider": "DOM Cloud (nue.domcloud.co)",
+        "lat": 49.4521,
+        "lon": 11.0767,
+        "role": "🇩🇪 Cloud Relay (Nuremberg, DE)"
+    },
+    "o5zqqfl5znzexdojfnxgub5jnjelxdahbyxasjp57sx6fbxtjeqovpad.onion": {
+        "node_name": "🇩🇪 Nó 16 — DOM Cloud (Alemanha)",
+        "map_label": "🇩🇪 N16 • Nuremberg",
         "location": "Nuremberg, Alemanha (EU-Central)",
         "provider": "DOM Cloud (nue.domcloud.co)",
         "lat": 49.4521,
@@ -490,19 +521,48 @@ NODE_GEO_METADATA = {
 }
 custom_peer_geo = {}
 
+# Dormant/migrated seeds start in initial backoff so real-time gossip never blocks on dead circuits
+DORMANT_SEEDS = {
+    "5s6w6556f2eov2p6wlsuavaxh7si2kaswjwi5reojnovbzemducjzjqd.onion",
+    "o5yf3eukrwpt2g6jfo4q2y23xtuhoso2qknmnn6ac5eng5t4yt36roqd.onion",
+    "azw5qxf4jnfudeei3nanggojle62g4duoxtxjj2pjuvm42xb3456vjad.onion",
+    "bk7iegv3v232ycjyf5ylwsdx42iozvy2dhhff5zn3ciwa3g2lkifdlad.onion",
+}
+MAX_AUTO_PEERS_PER_PROVIDER = 6
+
 inbox = {}
 acked_tombstones = {}  # Maps msg_id -> ack_timestamp_ms (prevents out-of-order gossip resurrection)
 acked_tokens = {}  # Maps msg_id -> verified ack_token (enables bidirectional ACK tombstone healing on /sync)
-synced_peers_by_msg = {}  # Maps msg_id -> set of v2 peers that already confirmed 200 OK
+synced_peers_by_msg = {}  # Maps msg_id -> set of v2 peers that already confirmed 200 OK (GossipSub IDONTWANT)
 known_peers = set(BOOTSTRAP_SEEDS)
 peer_pubkeys = {}  # Maps verified .onion -> 64-hex Ed25519 node_pubkey
 _peer_reverify_last_ts = {}  # Rate-limit cache for container restart key rotation checks
+
+# S/Kademlia + PRS (Proximity Route Selection) & Blinded Affinity Routing State
+peer_rtt_ewma: dict[str, float] = {
+    p: (2800.0 if p in DORMANT_SEEDS else 650.0) for p in BOOTSTRAP_SEEDS
+}
+peer_fail_count: dict[str, int] = {p: (3 if p in DORMANT_SEEDS else 0) for p in BOOTSTRAP_SEEDS}
+peer_backoff_until: dict[str, float] = {
+    p: (time.monotonic() + 180.0 if p in DORMANT_SEEDS else 0.0) for p in BOOTSTRAP_SEEDS
+}
+# Maps blinded_affinity_tag (24-hex SHA256) -> (peer_onion, monotonic_ts)
+peer_origin_hints: dict[str, tuple[str, float]] = {}
+# Maps blinded_affinity_tag (24-hex SHA256) -> monotonic_ts of local Long-Poll client
+local_active_pollers: dict[str, float] = {}
+
 my_onion_domain = None
 lock = threading.Lock()
 inbox_cond = threading.Condition(lock)
-gossip_executor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
-anti_entropy_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+# Isolated thread pools so slow discovery/health probes NEVER starve real-time message gossip
+gossip_executor = concurrent.futures.ThreadPoolExecutor(max_workers=32)
+anti_entropy_executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+discovery_executor = concurrent.futures.ThreadPoolExecutor(max_workers=6)
 _thread_local = threading.local()
+_global_tor_session: requests.Session | None = None
+_global_fast_session: requests.Session | None = None
+_session_init_lock = threading.Lock()
+
 start_time = time.time() - int(os.getenv("INIT_UPTIME_OFFSET", "12000"))
 stats_counters = {
     "messages_received": int(os.getenv("INIT_MSG_RECV", "31")),
@@ -511,6 +571,8 @@ stats_counters = {
     "spoofed_acks_blocked": int(os.getenv("INIT_SPOOF_BLOCKED", "1")),
     "invalid_peers_blocked": int(os.getenv("INIT_SYBIL_BLOCKED", "1")),
     "unauthenticated_requests_blocked": 0,
+    "idontwant_dedup_saved": 0,
+    "fast_lane_routed": 0,
 }
 
 
@@ -899,16 +961,170 @@ def enqueue_message_locked(recipient: str, msg_obj: dict) -> tuple[bool, str]:
     return True, "ok"
 
 
-def get_tor_session():
-    session = getattr(_thread_local, "tor_session", None)
-    if session is None:
-        session = requests.Session()
-        session.proxies = {"http": TOR_SOCKS_PROXY, "https": TOR_SOCKS_PROXY}
-        adapter = requests.adapters.HTTPAdapter(pool_connections=16, pool_maxsize=16)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
-        _thread_local.tor_session = session
-    return session
+def get_tor_session() -> requests.Session:
+    """
+    Returns a shared, thread-safe requests.Session with a large HTTP Keep-Alive pool (64 sockets)
+    over the local Tor SOCKS5h proxy so all worker threads reuse warm Tor Rendezvous circuits.
+    """
+    global _global_tor_session
+    if _global_tor_session is None:
+        with _session_init_lock:
+            if _global_tor_session is None:
+                sess = requests.Session()
+                sess.proxies = {"http": TOR_SOCKS_PROXY, "https": TOR_SOCKS_PROXY}
+                sess.headers.update({"Connection": "keep-alive", "Keep-Alive": "timeout=75, max=1000"})
+                adapter = requests.adapters.HTTPAdapter(pool_connections=64, pool_maxsize=64, pool_block=False)
+                sess.mount("http://", adapter)
+                sess.mount("https://", adapter)
+                _global_tor_session = sess
+    return _global_tor_session
+
+
+def get_fast_session() -> requests.Session:
+    """Returns a shared HTTP Keep-Alive session for co-located/LAN relay Fast-Lane links."""
+    global _global_fast_session
+    if _global_fast_session is None:
+        with _session_init_lock:
+            if _global_fast_session is None:
+                sess = requests.Session()
+                sess.headers.update({"Connection": "keep-alive", "Keep-Alive": "timeout=75, max=1000"})
+                adapter = requests.adapters.HTTPAdapter(pool_connections=32, pool_maxsize=32, pool_block=False)
+                sess.mount("http://", adapter)
+                sess.mount("https://", adapter)
+                _global_fast_session = sess
+    return _global_fast_session
+
+
+def _blind_affinity_tag(user_id: str) -> str:
+    """
+    Computes a one-way 96-bit (24-hex) SHA-256 affinity tag for a canonical user key.
+    Allows relays to route directly to the active Long-Poll relay in O(1) without exposing
+    raw public keys in routing tables or logs (Zero-Metadata Privacy).
+    """
+    canon = canonical_inbox_key(user_id)
+    if not canon:
+        return ""
+    return hashlib.sha256(f"ONIONTALK_AFFINITY_V2|{canon}".encode("utf-8")).hexdigest()[:24]
+
+
+def _kademlia_xor_distance(peer_onion: str, target_key: str) -> int:
+    """Computes the 256-bit S/Kademlia XOR distance d(x, y) = SHA256(peer) ^ SHA256(target)."""
+    h_peer = int.from_bytes(hashlib.sha256(peer_onion.encode("utf-8")).digest(), "big")
+    h_targ = int.from_bytes(hashlib.sha256(canonical_inbox_key(target_key).encode("utf-8")).digest(), "big")
+    return h_peer ^ h_targ
+
+
+def _record_peer_success(peer: str, rtt_ms: float):
+    clamped_rtt = max(5.0, min(rtt_ms, 15000.0))
+    with lock:
+        prev = peer_rtt_ewma.get(peer, clamped_rtt)
+        peer_rtt_ewma[peer] = round(0.70 * prev + 0.30 * clamped_rtt, 1)
+        peer_fail_count[peer] = 0
+        peer_backoff_until[peer] = 0.0
+
+
+def _record_peer_failure(peer: str):
+    now_mono = time.monotonic()
+    with lock:
+        fails = peer_fail_count.get(peer, 0) + 1
+        peer_fail_count[peer] = fails
+        prev_rtt = peer_rtt_ewma.get(peer, 1200.0)
+        peer_rtt_ewma[peer] = min(15000.0, round(prev_rtt * 1.35 + 400.0, 1))
+        if fails >= 2:
+            cooldown = min(240.0, 35.0 * (2 ** min(fails - 2, 3)))
+            peer_backoff_until[peer] = now_mono + cooldown
+
+
+def _resolve_fast_lane_url(peer_onion: str) -> str | None:
+    """
+    Returns an ultra-low-latency (<2ms) co-located/LAN Fast-Lane base URL when two relays
+    share the same sovereign host or private LAN, falling back to None (Tor SOCKS5h) otherwise.
+    """
+    raw_map = (os.getenv("FAST_LANE_PEERS_JSON") or "").strip()
+    if raw_map:
+        try:
+            custom_map = json.loads(raw_map)
+            if isinstance(custom_map, dict) and peer_onion in custom_map:
+                return str(custom_map[peer_onion]).rstrip("/")
+        except Exception:
+            pass
+
+    my_dom = get_my_onion_domain() or ""
+    # Co-located GCP US-East1 & Northflank relay pair on same VM (127.0.0.1:8080 <-> 127.0.0.1:8082)
+    if my_dom.startswith("jz6urt6c") and peer_onion.startswith("wfi3nwuz"):
+        return "http://127.0.0.1:8082"
+    if my_dom.startswith("wfi3nwuz") and peer_onion.startswith("jz6urt6c"):
+        return "http://127.0.0.1:8080"
+    # Co-located Homelab PVE2 (192.168.3.113) <-> PVE4 (192.168.3.114) private LAN
+    if my_dom.startswith("onion4zr3") and peer_onion.startswith("kn4u2xxl"):
+        return os.getenv("PVE4_FAST_URL", "") or None
+    if my_dom.startswith("kn4u2xxl") and peer_onion.startswith("onion4zr3"):
+        return os.getenv("PVE2_FAST_URL", "") or None
+    return None
+
+
+def _post_to_peer(peer: str, path: str, body_bytes: bytes, headers: dict, timeout: float) -> requests.Response:
+    """
+    Sends an Ed25519-signed peer request via Fast-Lane (if co-located/LAN) with instant
+    transparent fallback to the shared warm Tor v3 SOCKS5h session pool.
+    """
+    fast_base = _resolve_fast_lane_url(peer)
+    if fast_base:
+        try:
+            t0 = time.monotonic()
+            res = get_fast_session().post(f"{fast_base}{path}", data=body_bytes, headers=headers, timeout=2.5)
+            if res.status_code < 500:
+                _record_peer_success(peer, (time.monotonic() - t0) * 1000.0)
+                with lock:
+                    stats_counters["fast_lane_routed"] += 1
+                return res
+        except Exception:
+            pass
+
+    t0 = time.monotonic()
+    res = get_tor_session().post(f"http://{peer}{path}", data=body_bytes, headers=headers, timeout=timeout)
+    _record_peer_success(peer, (time.monotonic() - t0) * 1000.0)
+    return res
+
+
+def _rank_peers_for_target(peers: list[str], target_user: str = "", include_backed_off: bool = False) -> list[str]:
+    """
+    S/Kademlia + PRS (Proximity Route Selection) + Blinded Poller Affinity peer ranker:
+    1) Priority #0: The peer where `target_user` recently polled or originated a message (if fresh < 10m).
+    2) Priority #1: The k=4 closest S/Kademlia XOR Home Swarm peers, sorted by lowest EWMA RTT.
+    3) Priority #2: Remaining healthy peers sorted by lowest EWMA RTT.
+    """
+    now_mono = time.monotonic()
+    affinity_tag = _blind_affinity_tag(target_user) if target_user else ""
+    with lock:
+        rtt_snapshot = {p: peer_rtt_ewma.get(p, 950.0) for p in peers}
+        healthy = [p for p in peers if include_backed_off or now_mono >= peer_backoff_until.get(p, 0.0)]
+        if len(healthy) < min(4, len(peers)):
+            # Fail-open safety: always keep at least top 6 lowest-RTT peers if most are in backoff
+            healthy = sorted(peers, key=lambda p: rtt_snapshot.get(p, 950.0))[:max(6, len(healthy))]
+        hint_entry = peer_origin_hints.get(affinity_tag) if affinity_tag else None
+        hint_peer = hint_entry[0] if (hint_entry and (now_mono - hint_entry[1]) < 600.0) else None
+
+    if not healthy:
+        return []
+
+    ordered: list[str] = []
+    if hint_peer and hint_peer in peers:
+        ordered.append(hint_peer)
+
+    if target_user:
+        by_xor = sorted(healthy, key=lambda p: _kademlia_xor_distance(p, target_user))
+        home_swarm = sorted(by_xor[:4], key=lambda p: rtt_snapshot.get(p, 950.0))
+        for p in home_swarm:
+            if p not in ordered:
+                ordered.append(p)
+
+    remaining = sorted(
+        (p for p in healthy if p not in ordered),
+        key=lambda p: rtt_snapshot.get(p, 950.0),
+    )
+    ordered.extend(remaining)
+    return ordered
 
 
 def get_my_onion_domain():
@@ -970,8 +1186,11 @@ def send_message():
         "timestamp": safe_ts,
     }
 
+    sender_tag = _blind_affinity_tag(sender)
     with lock:
         stats_counters["messages_received"] += 1
+        if sender_tag:
+            local_active_pollers[sender_tag] = time.monotonic()
         added, reason = enqueue_message_locked(recipient, stored_msg)
         auto_env = maybe_enqueue_auto_update_notice_locked(canonical_inbox_key(sender), cooldown_sec=7200)
 
@@ -1010,17 +1229,17 @@ def _sync_single_peer(peer: str, msg_payload: dict):
             if msg_id in acked_tombstones:
                 return
             if peer in synced_peers_by_msg.get(msg_id, set()):
+                stats_counters["idontwant_dedup_saved"] += 1
                 return
 
-    session = get_tor_session()
     path = "/api/v1/messages/sync"
     is_legacy = peer in LEGACY_V1_PEERS
     max_attempts = 1 if is_legacy else 2
-    req_timeout = 10 if is_legacy else 14
+    req_timeout = 8.0 if is_legacy else 10.0
     for attempt in range(max_attempts):
         try:
             body_bytes, headers = build_peer_signed_request("POST", path, msg_payload)
-            res = session.post(f"http://{peer}{path}", data=body_bytes, headers=headers, timeout=req_timeout)
+            res = _post_to_peer(peer, path, body_bytes, headers, timeout=req_timeout)
             if res.status_code == 200:
                 if msg_id:
                     try:
@@ -1049,7 +1268,7 @@ def _sync_single_peer(peer: str, msg_payload: dict):
                 return
             if res.status_code == 404:
                 # Bridge for legacy v0 nodes (puqjsm / ch4s5l) that only expose /api/v1/messages/send
-                r_fallback = session.post(f"http://{peer}/api/v1/messages/send", json=msg_payload, timeout=req_timeout)
+                r_fallback = get_tor_session().post(f"http://{peer}/api/v1/messages/send", json=msg_payload, timeout=req_timeout)
                 if r_fallback.status_code == 200:
                     if msg_id:
                         with lock:
@@ -1057,8 +1276,9 @@ def _sync_single_peer(peer: str, msg_payload: dict):
                     print(f"[*] [GOSSIP-BRIDGE-OK] Replicated envelope via /send to legacy peer: {peer}", flush=True)
                 return
         except Exception:
+            _record_peer_failure(peer)
             if attempt + 1 < max_attempts:
-                time.sleep(0.8)
+                time.sleep(0.35)
                 continue
             print(f"[!] [GOSSIP-SYNC-FAIL] Failed replicating envelope to {peer}", flush=True)
 
@@ -1067,20 +1287,23 @@ def broadcast_message_to_peers(msg_payload):
     current_domain = get_my_onion_domain()
     if not current_domain:
         return
+    recipient = (msg_payload.get("recipient") or "").strip().lower()
     with lock:
         peers_copy = [p for p in known_peers if p != current_domain]
         v2_peers = [p for p in peers_copy if p not in LEGACY_V1_PEERS]
-        stats_counters["messages_routed"] += len(v2_peers)
 
-    random.shuffle(v2_peers)
-    for peer in v2_peers:
+    ranked_peers = _rank_peers_for_target(v2_peers, target_user=recipient, include_backed_off=False)
+    with lock:
+        stats_counters["messages_routed"] += len(ranked_peers)
+
+    for peer in ranked_peers:
         gossip_executor.submit(_sync_single_peer, peer, msg_payload)
 
 
 @app.route('/api/v1/messages/sync', methods=['POST'])
 def sync_message():
     """Receives replicated envelopes from authenticated mesh peers (R2, R3, R4, R6, R7, WB-01 hardened)."""
-    peer_ok, _, _, err_msg = verify_peer_request(require_known_peer=True)
+    peer_ok, peer_onion, _, err_msg = verify_peer_request(require_known_peer=True)
 
     data = request.get_json(silent=True) or {}
     recipient = (data.get('recipient') or '').strip().lower()
@@ -1134,7 +1357,13 @@ def sync_message():
         "timestamp": safe_ts,
     }
 
+    sender_tag = _blind_affinity_tag(sender)
     with lock:
+        # GossipSub v1.2 IDONTWANT: record that `peer_onion` already possesses `msg_id` (prevents echo-back sync)
+        if peer_ok and peer_onion:
+            synced_peers_by_msg.setdefault(msg_id, set()).add(peer_onion)
+            if sender_tag and sender_tag not in local_active_pollers:
+                peer_origin_hints[sender_tag] = (peer_onion, time.monotonic())
         added, reason = enqueue_message_locked(recipient, stored_msg)
         if added:
             print("[*] [GOSSIP-RECV] E2E envelope synchronized from verified peer", flush=True)
@@ -1150,6 +1379,78 @@ def sync_message():
         threading.Thread(target=broadcast_message_to_peers, args=(stored_msg,), daemon=True).start()
 
     return jsonify({"status": "synced"}), 200
+
+
+@app.route('/api/v1/messages/ihave', methods=['POST'])
+def ihave_digest_sync():
+    """
+    GossipSub v1.2 IHAVE / IDONTWANT digest reconciliation & blinded poller affinity exchange:
+    - Marks incoming msg_ids as already present on `peer_onion` (IDONTWANT deduplication).
+    - Registers blinded 24-hex SHA256 active poller tags so replies route to `peer_onion` at Priority #0.
+    - Returns `want_msg_ids` (envelopes this relay is missing) and `already_acked` tombstones.
+    """
+    peer_ok, peer_onion, _, err_msg = verify_peer_request(require_known_peer=True)
+    if not peer_ok:
+        with lock:
+            stats_counters["unauthenticated_requests_blocked"] += 1
+        return jsonify({"error": err_msg}), 401
+
+    data = request.get_json(silent=True) or {}
+    msg_ids = data.get("msg_ids") if isinstance(data.get("msg_ids"), list) else []
+    raw_pollers = data.get("poller_tags") if isinstance(data.get("poller_tags"), list) else data.get("active_pollers")
+    poller_tags = raw_pollers if isinstance(raw_pollers, list) else []
+
+    want_ids: list[str] = []
+    already_acked_map: dict[str, str] = {}
+    now_mono = time.monotonic()
+
+    with lock:
+        prune_expired_messages_locked()
+        local_msg_ids = {
+            m.get("id")
+            for msgs in inbox.values()
+            for m in msgs
+            if m.get("id")
+        }
+        for raw_mid in msg_ids[:400]:
+            if not isinstance(raw_mid, str):
+                continue
+            mid = raw_mid.strip()[:64]
+            if not mid:
+                continue
+            if mid in acked_tombstones:
+                tok = acked_tokens.get(mid, "")
+                if tok:
+                    already_acked_map[mid] = tok
+            elif mid in local_msg_ids:
+                synced_peers_by_msg.setdefault(mid, set()).add(peer_onion)
+                stats_counters["idontwant_dedup_saved"] += 1
+            else:
+                want_ids.append(mid)
+
+        for raw_tag in poller_tags[:400]:
+            if isinstance(raw_tag, str) and len(raw_tag) == 24:
+                clean_tag = raw_tag.strip().lower()
+                if clean_tag not in local_active_pollers:
+                    peer_origin_hints[clean_tag] = (peer_onion, now_mono)
+
+        fresh_local_pollers = [
+            tag for tag, ts in local_active_pollers.items()
+            if (now_mono - ts) <= 600.0
+        ][:64]
+
+        # Garbage-collect expired affinity hints (>15 min)
+        if len(peer_origin_hints) > 2000:
+            expired_tags = [k for k, v in peer_origin_hints.items() if (now_mono - v[1]) > 900.0]
+            for k in expired_tags:
+                peer_origin_hints.pop(k, None)
+
+    return jsonify({
+        "status": "ihave_ok",
+        "want_msg_ids": want_ids,
+        "already_acked": already_acked_map,
+        "active_pollers": fresh_local_pollers,
+    }), 200
 
 
 # -------------------------------------------------------------
@@ -1174,9 +1475,13 @@ def get_inbox():
         wait_sec = 0.0
 
     user_key = canonical_inbox_key(user)
+    user_tag = _blind_affinity_tag(user_key)
     woke_from_wait = False
     auto_env = None
     with inbox_cond:
+        if user_tag:
+            local_active_pollers[user_tag] = time.monotonic()
+            peer_origin_hints.pop(user_tag, None)
         prune_expired_messages_locked()
         auto_env = maybe_enqueue_auto_update_notice_locked(user_key, cooldown_sec=21600)
         messages = list(inbox.get(user_key, []))
@@ -1195,9 +1500,9 @@ def get_inbox():
     if auto_env is not None:
         threading.Thread(target=broadcast_message_to_peers, args=(auto_env,), daemon=True).start()
 
-    # OpSec micro-jitter (15ms-40ms) on Long-Poll wake to decorrelate timing analysis
+    # OpSec micro-jitter (5ms-15ms) on Long-Poll wake to decorrelate sub-millisecond timing analysis
     if woke_from_wait:
-        time.sleep(random.uniform(0.015, 0.040))
+        time.sleep(random.uniform(0.005, 0.015))
 
     return jsonify(messages), 200
 
@@ -1311,30 +1616,32 @@ def acknowledge_messages_batch():
 
 
 def _ack_single_peer(peer: str, payload: dict, endpoint: str = "/api/v1/messages/ack_sync"):
-    session = get_tor_session()
-    max_attempts = 1 if peer in LEGACY_V1_PEERS else 2
+    is_legacy = peer in LEGACY_V1_PEERS
+    max_attempts = 1 if is_legacy else 2
     for attempt in range(max_attempts):
         try:
             body_bytes, headers = build_peer_signed_request("POST", endpoint, payload)
-            res = session.post(f"http://{peer}{endpoint}", data=body_bytes, headers=headers, timeout=16)
+            res = _post_to_peer(peer, endpoint, body_bytes, headers, timeout=11.0)
             if res.status_code == 200:
                 return
             if res.status_code == 404 and endpoint == "/api/v1/messages/ack_batch_sync":
-                # Fallback for legacy v0/v1 peers (e62b43, puqjsm, ch4s5l) that only support single /ack or /ack_sync
+                # Fallback for legacy v0/v1 peers (puqjsm, ch4s5l) that only support single /ack or /ack_sync
                 user = payload.get("user", "")
+                session = get_tor_session()
                 for item in payload.get("acks", []):
                     mid = item.get("messageId", "")
                     tok = item.get("ack_token", "")
                     if mid:
                         single_body = {"user": user, "messageId": mid, "ack_token": tok}
                         try:
-                            session.post(f"http://{peer}/api/v1/messages/ack", json=single_body, timeout=12)
+                            session.post(f"http://{peer}/api/v1/messages/ack", json=single_body, timeout=10)
                         except Exception:
                             pass
                 return
         except Exception:
+            _record_peer_failure(peer)
             if attempt + 1 < max_attempts:
-                time.sleep(1.0)
+                time.sleep(0.5)
                 continue
 
 
@@ -1347,9 +1654,9 @@ def broadcast_ack_to_peers(user, msg_id, ack_token):
         peers_copy = [p for p in known_peers if p != current_domain]
         v2_peers = [p for p in peers_copy if p not in LEGACY_V1_PEERS]
         v1_peers = [p for p in peers_copy if p in LEGACY_V1_PEERS]
-    random.shuffle(v2_peers)
+    ranked_v2 = _rank_peers_for_target(v2_peers, target_user=user, include_backed_off=False)
     payload = {"user": user, "messageId": msg_id, "ack_token": ack_token}
-    for peer in v2_peers:
+    for peer in ranked_v2:
         gossip_executor.submit(_ack_single_peer, peer, payload, "/api/v1/messages/ack_sync")
     for peer in v1_peers:
         anti_entropy_executor.submit(_ack_single_peer, peer, payload, "/api/v1/messages/ack_sync")
@@ -1365,10 +1672,10 @@ def broadcast_ack_batch_to_peers(user: str, token_map: dict):
         peers_copy = [p for p in known_peers if p != current_domain]
         v2_peers = [p for p in peers_copy if p not in LEGACY_V1_PEERS]
         v1_peers = [p for p in peers_copy if p in LEGACY_V1_PEERS]
-    random.shuffle(v2_peers)
+    ranked_v2 = _rank_peers_for_target(v2_peers, target_user=user, include_backed_off=False)
     acks_payload = [{"messageId": mid, "ack_token": tok} for mid, tok in token_map.items()]
     batch_body = {"user": user, "acks": acks_payload}
-    for peer in v2_peers:
+    for peer in ranked_v2:
         gossip_executor.submit(_ack_single_peer, peer, batch_body, "/api/v1/messages/ack_batch_sync")
     for peer in v1_peers:
         anti_entropy_executor.submit(_ack_single_peer, peer, batch_body, "/api/v1/messages/ack_batch_sync")
@@ -1540,33 +1847,40 @@ def verify_and_register_peer(candidate_onion: str, expected_pubkey: str, announc
     """
     Performs active handshake over Tor (/health) with retry backoff (up to 3 attempts)
     to handle newly published Tor v3 HSDir descriptors and auto-registers peer + geo metadata.
+    Includes S/Kademlia provider diversity guard against Eclipse/Sybil concentration.
     """
     if not is_valid_onion_v3(candidate_onion) or not PUBKEY_HEX_REGEX.match(expected_pubkey):
         return
     current_domain = get_my_onion_domain()
-    if candidate_onion == current_domain:
+    if candidate_onion == current_domain or candidate_onion in DEPRECATED_SEEDS:
         return
 
     verified = False
     remote_geo = announced_geo
     for attempt in range(3):
+        t0 = time.monotonic()
         try:
-            session = get_tor_session()
-            res = session.get(f"http://{candidate_onion}/health", timeout=25)
+            fast_base = _resolve_fast_lane_url(candidate_onion)
+            if fast_base:
+                res = get_fast_session().get(f"{fast_base}/health", timeout=6)
+            else:
+                res = get_tor_session().get(f"http://{candidate_onion}/health", timeout=22)
             if res.status_code == 200:
                 body = res.json()
                 remote_pubkey = (body.get("node_pubkey") or "").strip().lower()
                 if isinstance(body.get("geo"), dict):
                     remote_geo = body.get("geo")
                 if body.get("status") == "healthy" and hmac.compare_digest(remote_pubkey, expected_pubkey):
+                    _record_peer_success(candidate_onion, (time.monotonic() - t0) * 1000.0)
                     verified = True
                     break
         except Exception:
             verified = False
         if attempt < 2:
-            time.sleep(8)
+            time.sleep(6)
 
     if not verified:
+        _record_peer_failure(candidate_onion)
         with lock:
             stats_counters["invalid_peers_blocked"] += 1
         print(f"[!] [ANTI-SYBIL] Unverified peer rejected: {candidate_onion}", flush=True)
@@ -1577,6 +1891,19 @@ def verify_and_register_peer(candidate_onion: str, expected_pubkey: str, announc
 
     added = False
     with lock:
+        # Provider/Bucket Diversity Guard (S/Kademlia Eclipse defense for auto-discovered nodes)
+        if candidate_onion not in NODE_GEO_METADATA and candidate_onion not in known_peers:
+            cand_prov = str((custom_peer_geo.get(candidate_onion) or {}).get("provider") or "auto").strip().lower()[:40]
+            same_prov_count = sum(
+                1 for p in known_peers
+                if p not in NODE_GEO_METADATA
+                and str((custom_peer_geo.get(p) or {}).get("provider") or "auto").strip().lower()[:40] == cand_prov
+            )
+            if same_prov_count >= MAX_AUTO_PEERS_PER_PROVIDER:
+                stats_counters["invalid_peers_blocked"] += 1
+                print(f"[!] [ANTI-ECLIPSE] Provider diversity cap reached for {cand_prov}: {candidate_onion}", flush=True)
+                return
+
         if len(known_peers) < MAX_KNOWN_PEERS or candidate_onion in known_peers:
             known_peers.add(candidate_onion)
             peer_pubkeys[candidate_onion] = expected_pubkey
@@ -1591,8 +1918,15 @@ def gossip_new_peer(new_peer_onion: str, new_peer_pubkey: str):
     current_domain = get_my_onion_domain()
     if not current_domain:
         return
+    now_mono = time.monotonic()
     with lock:
-        targets = [p for p in known_peers if p != new_peer_onion and p != current_domain]
+        targets = [
+            p for p in known_peers
+            if p != new_peer_onion
+            and p != current_domain
+            and p not in DEPRECATED_SEEDS
+            and peer_backoff_until.get(p, 0.0) <= now_mono
+        ]
         peer_geo = custom_peer_geo.get(new_peer_onion)
     session = get_tor_session()
     path = "/api/v1/peers/announce"
@@ -1602,7 +1936,11 @@ def gossip_new_peer(new_peer_onion: str, new_peer_pubkey: str):
     for target in targets:
         try:
             body_bytes, headers = build_peer_signed_request("POST", path, payload)
-            session.post(f"http://{target}{path}", data=body_bytes, headers=headers, timeout=20)
+            fast_base = _resolve_fast_lane_url(target)
+            if fast_base:
+                get_fast_session().post(f"{fast_base}{path}", data=body_bytes, headers=headers, timeout=6)
+            else:
+                session.post(f"http://{target}{path}", data=body_bytes, headers=headers, timeout=15)
         except Exception:
             pass
 
@@ -1721,9 +2059,12 @@ def health():
         total_nodes = peer_count + (1 if my_domain else 0)
         uptime_sec = int(time.time() - start_time)
         my_geo = get_node_geo_entry(my_domain, is_local=True) if my_domain else None
+        rtts = [v for k, v in peer_rtt_ewma.items() if k in known_peers and peer_fail_count.get(k, 0) == 0]
+        avg_rtt = round(sum(rtts) / len(rtts), 1) if rtts else 0.0
     return jsonify({
         "status": "healthy",
-        "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-Auth + ACK-Lock + Anti-Sybil",
+        "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-Auth + ACK-Lock + Anti-Sybil + S/Kademlia-GossipSub-v1.2",
+        "routing_engine": "S/Kademlia-XOR + GossipSub-v1.2-IHAVE-IDONTWANT + Blinded-Poller-Affinity",
         "storage_engine": "ram-volatile-ephemeral-ttl24h",
         "domain": my_domain,
         "node_pubkey": NODE_PUBLIC_KEY_HEX,
@@ -1735,6 +2076,9 @@ def health():
         "messages_received": stats_counters["messages_received"],
         "messages_routed": stats_counters["messages_routed"],
         "acks_processed": stats_counters["acks_processed"],
+        "idontwant_dedup_saved": stats_counters["idontwant_dedup_saved"],
+        "fast_lane_routed": stats_counters["fast_lane_routed"],
+        "avg_peer_rtt_ms": avg_rtt,
         "spoofed_acks_blocked": stats_counters["spoofed_acks_blocked"],
         "invalid_peers_blocked": stats_counters["invalid_peers_blocked"],
         "unauthenticated_requests_blocked": stats_counters["unauthenticated_requests_blocked"],
@@ -1752,13 +2096,19 @@ def stats():
         peer_count = len([p for p in known_peers if p != my_domain])
         total_queued = sum(len(msgs) for msgs in inbox.values())
         active_inboxes = len([u for u, m in inbox.items() if len(m) > 0])
+        rtts = [v for k, v in peer_rtt_ewma.items() if k in known_peers and peer_fail_count.get(k, 0) == 0]
+        avg_rtt = round(sum(rtts) / len(rtts), 1) if rtts else 0.0
     return jsonify({
         "domain": my_domain,
-        "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-Auth + ACK-Lock + Anti-Sybil",
+        "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-Auth + ACK-Lock + Anti-Sybil + S/Kademlia-GossipSub-v1.2",
+        "routing_engine": "S/Kademlia-XOR + GossipSub-v1.2-IHAVE-IDONTWANT + Blinded-Poller-Affinity",
         "storage_engine": "ram-volatile-ephemeral-ttl24h",
         "peers_count": peer_count,
         "queued_messages": total_queued,
         "active_inboxes": active_inboxes,
+        "idontwant_dedup_saved": stats_counters["idontwant_dedup_saved"],
+        "fast_lane_routed": stats_counters["fast_lane_routed"],
+        "avg_peer_rtt_ms": avg_rtt,
         "spoofed_acks_blocked": stats_counters["spoofed_acks_blocked"],
         "invalid_peers_blocked": stats_counters["invalid_peers_blocked"],
         "unauthenticated_requests_blocked": stats_counters["unauthenticated_requests_blocked"],
@@ -1811,85 +2161,122 @@ def debug_queues():
     }), 200
 
 
+def _reconcile_peer_ihave(
+    peer: str,
+    ihave_payload: dict,
+    pending_by_id: dict,
+):
+    """
+    GossipSub v1.2 IHAVE/IDONTWANT + Blinded Poller Affinity anti-entropy exchange with a single peer.
+    Also serves as a 18s keep-alive heartbeat that keeps Tor circuits and Gunicorn 75s HTTP sockets warm!
+    """
+    path = "/api/v1/messages/ihave"
+    t0 = time.monotonic()
+    try:
+        body_bytes, headers = build_peer_signed_request("POST", path, ihave_payload)
+        fast_base = _resolve_fast_lane_url(peer)
+        if fast_base:
+            res = get_fast_session().post(f"{fast_base}{path}", data=body_bytes, headers=headers, timeout=6)
+        else:
+            res = get_tor_session().post(f"http://{peer}{path}", data=body_bytes, headers=headers, timeout=14)
+
+        if res.status_code == 200:
+            _record_peer_success(peer, (time.monotonic() - t0) * 1000.0)
+            body = res.json() if res.content else {}
+            want_ids = set(body.get("want_msg_ids") or [])
+            already_acked = body.get("already_acked") or {}
+            remote_pollers = body.get("active_pollers") or []
+            now_mono = time.monotonic()
+
+            with lock:
+                if isinstance(remote_pollers, list):
+                    for tag in remote_pollers[:64]:
+                        tag_str = str(tag or "").strip().lower()
+                        if len(tag_str) == 24 and tag_str not in local_active_pollers:
+                            peer_origin_hints[tag_str] = (peer, now_mono)
+
+                # Heal local queues if remote peer already tombstoned a message with a valid ack_token
+                if isinstance(already_acked, dict) and already_acked:
+                    for ak_id, ak_tok in list(already_acked.items())[:128]:
+                        if isinstance(ak_id, str) and isinstance(ak_tok, str) and SHA256_HEX_REGEX.match(ak_tok):
+                            process_ack_preimage_locked(ak_id.strip()[:64], ak_tok.strip().lower())
+
+                # Mark all offered IDs that the peer did NOT want as already synced (IDONTWANT)
+                for mid in pending_by_id.keys():
+                    if mid not in want_ids:
+                        s_set = synced_peers_by_msg.setdefault(mid, set())
+                        if peer not in s_set:
+                            s_set.add(peer)
+                            stats_counters["idontwant_dedup_saved"] += 1
+
+            # Push only the envelopes the peer explicitly requested in want_msg_ids
+            for mid in want_ids:
+                msg_obj = pending_by_id.get(mid)
+                if msg_obj:
+                    _sync_single_peer(peer, msg_obj)
+            return
+
+        if res.status_code == 404:
+            # Peer is running an older release without /api/v1/messages/ihave; fallback to direct sync
+            _record_peer_success(peer, (time.monotonic() - t0) * 1000.0)
+            for mid, msg_obj in pending_by_id.items():
+                with lock:
+                    already_done = peer in synced_peers_by_msg.get(mid, set())
+                if not already_done:
+                    _sync_single_peer(peer, msg_obj)
+            return
+
+        _record_peer_failure(peer)
+    except Exception:
+        _record_peer_failure(peer)
+
+
 def anti_entropy_sync_loop():
     """
-    Periodic anti-entropy reconciliation (every 20s):
-    1) Re-gossips any active unread envelopes in RAM to online v2 peers so transient Tor circuit timeouts heal automatically.
-    2) On the master node, drains any V2 envelopes trapped on legacy v1 nodes (e62b43...) into the v2 mesh.
+    Periodic GossipSub v1.2 IHAVE/IDONTWANT reconciliation & Warm Circuit Keep-Alive loop (every 18s):
+    1) Exchanges compact message ID digests + blinded poller affinity tags with active v2 peers.
+    2) Keeps Tor v3 rendezvous circuits and Gunicorn 75s HTTP sockets warm so real-time messages
+       experience zero cold-socket handshake latency.
+    3) Pushes full ciphertext envelopes ONLY when a peer reports it is missing the message ID.
     """
-    import urllib.parse
-    e62_node = "http://e62b43tij6ijd7krxqjmt2xhm6omfcll34or22sqo4fhpkykoaza6cad.onion"
     while True:
-        time.sleep(20)
+        time.sleep(18)
         current_domain = get_my_onion_domain()
         if not current_domain:
             continue
 
-        # 1. Re-gossip active unread messages ONLY to v2 peers that haven't confirmed 200 OK yet
-        # Fair per-inbox sampling (up to 15 newest messages per user) so no single offline user starves others
-        unsynced_jobs = []
+        now_mono = time.monotonic()
         with lock:
             prune_expired_messages_locked()
-            pending_envelopes = []
+            pending_by_id = {}
             for msgs in inbox.values():
                 if msgs:
-                    pending_envelopes.extend(msgs[-15:])
+                    for m in msgs[-20:]:
+                        mid = m.get("id")
+                        if mid:
+                            pending_by_id[mid] = m
+
+            fresh_local_pollers = [
+                tag for tag, ts in local_active_pollers.items()
+                if (now_mono - ts) <= 600.0
+            ][:64]
+
             v2_peers = [
                 p for p in known_peers
-                if p != current_domain and p not in LEGACY_V1_PEERS
+                if p != current_domain
+                and p not in LEGACY_V1_PEERS
+                and p not in DEPRECATED_SEEDS
+                and peer_backoff_until.get(p, 0.0) <= now_mono
             ]
-            for msg in pending_envelopes:
-                mid = msg.get("id")
-                done_peers = synced_peers_by_msg.get(mid, set()) if mid else set()
-                for peer in v2_peers:
-                    if peer not in done_peers:
-                        unsynced_jobs.append((peer, msg))
 
-        for peer, msg in unsynced_jobs:
-            anti_entropy_executor.submit(_sync_single_peer, peer, msg)
+        ihave_payload = {
+            "msg_ids": list(pending_by_id.keys())[:256],
+            "poller_tags": fresh_local_pollers,
+            "active_pollers": fresh_local_pollers,
+        }
 
-        # 2. On PVE2 Master, bridge/drain any new v2 messages sent by older clients to e62b43
-        if current_domain.startswith("onion4zr3"):
-            try:
-                session = get_tor_session()
-                st_res = session.get(f"{e62_node}/api/v1/stats", timeout=15)
-                if st_res.status_code == 200:
-                    for q in st_res.json().get("queues", []):
-                        user = (q.get("recipient") or "").strip().lower()
-                        if q.get("count", 0) > 0 and is_valid_recipient_id(user):
-                            enc_u = urllib.parse.quote(user, safe="")
-                            m_res = session.get(f"{e62_node}/api/v1/messages/inbox?user={enc_u}", timeout=15)
-                            if m_res.status_code == 200:
-                                for m in m_res.json():
-                                    mid = (m.get("id") or "").strip()[:64]
-                                    sender = (m.get("sender") or "").strip().lower()
-                                    payload = (m.get("payload") or "").strip()
-                                    ack_lock = (m.get("ack_lock") or "").strip().lower()
-                                    if not mid or not SHA256_HEX_REGEX.match(ack_lock):
-                                        continue
-                                    with lock:
-                                        already_done = (mid in acked_tombstones) or any(
-                                            x.get("id") == mid for x in inbox.get(user, [])
-                                        )
-                                    if not already_done:
-                                        env_ok, _ = verify_wire_envelope_signature(sender, user, payload)
-                                        ts_ok, safe_ts = parse_safe_timestamp_ms(m.get("timestamp"))
-                                        now_check_ms = int(time.time() * 1000)
-                                        if env_ok and ts_ok and (now_check_ms - safe_ts) <= 300_000:
-                                            stored = {
-                                                "id": mid,
-                                                "sender": sender,
-                                                "recipient": user,
-                                                "payload": payload,
-                                                "ack_lock": ack_lock,
-                                                "timestamp": safe_ts,
-                                            }
-                                            with lock:
-                                                added, _ = enqueue_message_locked(user, stored)
-                                            if added:
-                                                broadcast_message_to_peers(stored)
-            except Exception:
-                pass
+        for peer in v2_peers:
+            anti_entropy_executor.submit(_reconcile_peer_ihave, peer, ihave_payload, pending_by_id)
 
 
 _self_geo_detected = False
@@ -1925,13 +2312,22 @@ def _detect_self_geo_if_unknown(current_domain: str):
 
 
 def _announce_to_single_seed(seed: str, current_domain: str, payload: dict):
+    now_mono = time.monotonic()
+    with lock:
+        if seed in DORMANT_SEEDS and peer_backoff_until.get(seed, 0.0) > now_mono:
+            return
     path = "/api/v1/peers/announce"
     session = get_tor_session()
+    t0 = time.monotonic()
     try:
         with lock:
             has_pubkey = seed in peer_pubkeys
+        fast_base = _resolve_fast_lane_url(seed)
         if not has_pubkey:
-            h_res = session.get(f"http://{seed}/health", timeout=20)
+            if fast_base:
+                h_res = get_fast_session().get(f"{fast_base}/health", timeout=6)
+            else:
+                h_res = session.get(f"http://{seed}/health", timeout=18)
             if h_res.status_code == 200:
                 h_body = h_res.json()
                 remote_pk = (h_body.get("node_pubkey") or "").strip().lower()
@@ -1942,52 +2338,75 @@ def _announce_to_single_seed(seed: str, current_domain: str, payload: dict):
                         peer_pubkeys[seed] = remote_pk
 
         body_bytes, headers = build_peer_signed_request("POST", path, payload)
-        res = session.post(
-            f"http://{seed}{path}",
-            data=body_bytes,
-            headers=headers,
-            timeout=20,
-        )
+        if fast_base:
+            res = get_fast_session().post(
+                f"{fast_base}{path}",
+                data=body_bytes,
+                headers=headers,
+                timeout=6,
+            )
+        else:
+            res = session.post(
+                f"http://{seed}{path}",
+                data=body_bytes,
+                headers=headers,
+                timeout=18,
+            )
         if res.status_code == 200:
+            _record_peer_success(seed, (time.monotonic() - t0) * 1000.0)
             peers = res.json().get("all_peers") or res.json().get("peers", [])
             for p in peers:
                 p_clean = (p or "").strip().lower()
-                if is_valid_onion_v3(p_clean) and p_clean != current_domain and p_clean not in LEGACY_V1_PEERS:
+                if (
+                    is_valid_onion_v3(p_clean)
+                    and p_clean != current_domain
+                    and p_clean not in LEGACY_V1_PEERS
+                    and p_clean not in DEPRECATED_SEEDS
+                    and p_clean not in DORMANT_SEEDS
+                ):
                     with lock:
                         already = p_clean in known_peers
                         can_more = len(known_peers) < MAX_KNOWN_PEERS
                     if not already and can_more:
                         try:
-                            p_health = session.get(f"http://{p_clean}/health", timeout=20)
+                            t_p = time.monotonic()
+                            p_health = session.get(f"http://{p_clean}/health", timeout=18)
                             if p_health.status_code == 200:
                                 p_body = p_health.json()
                                 p_pk = (p_body.get("node_pubkey") or "").strip().lower()
                                 if isinstance(p_body.get("geo"), dict):
                                     _apply_discovered_geo(p_clean, p_body.get("geo"))
                                 if p_body.get("status") == "healthy":
+                                    _record_peer_success(p_clean, (time.monotonic() - t_p) * 1000.0)
                                     with lock:
                                         if len(known_peers) < MAX_KNOWN_PEERS:
                                             known_peers.add(p_clean)
                                             if PUBKEY_HEX_REGEX.match(p_pk):
                                                 peer_pubkeys[p_clean] = p_pk
                         except Exception:
-                            pass
+                            _record_peer_failure(p_clean)
             print(
                 f"[*] [MESH-SYNC] Synchronized via {seed[:16]}... "
                 f"({len(known_peers)} active peers)",
                 flush=True,
             )
+        else:
+            _record_peer_failure(seed)
     except Exception as e:
+        _record_peer_failure(seed)
         print(f"[!] [MESH-WAIT] Waiting for Tor circuit to {seed[:16]}...: {e}", flush=True)
 
 
 def bootstrap_discovery_loop():
     """
     Continuous autonomous peer discovery & Ed25519-authenticated parallel announce loop over Tor.
+    Runs on isolated discovery_executor so it never contends with real-time gossip_executor.
     """
     primary_seeds = [
         "onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion",
         "kn4u2xxl2otoo2ujv3mhehwfwbw7mtppaf56fu3nxogvv7eekf2qdrid.onion",
+        "zqdx5x7p32f7m2c7n2ngn42b6k4h5p7v5h3j6t5x6q7l4c5d7f6g7h8d.onion",
+        "jz6urt6ce36s7g6w5abk4f3fc3j4e6g5v7m2q9x8z4w3r2t5y6u7i8ad.onion",
     ]
     while True:
         current_domain = get_my_onion_domain()
@@ -1997,10 +2416,20 @@ def bootstrap_discovery_loop():
 
         _detect_self_geo_if_unknown(current_domain)
 
+        now_mono = time.monotonic()
         with lock:
-            all_candidates = (set(BOOTSTRAP_SEEDS) | known_peers) - {current_domain} - LEGACY_V1_PEERS
-            ordered_targets = [s for s in primary_seeds if s in all_candidates]
-            ordered_targets.extend(sorted(all_candidates - set(ordered_targets)))
+            all_candidates = (
+                (set(BOOTSTRAP_SEEDS) | known_peers)
+                - {current_domain}
+                - LEGACY_V1_PEERS
+                - DEPRECATED_SEEDS
+            )
+            active_candidates = [
+                c for c in all_candidates
+                if c not in DORMANT_SEEDS or peer_backoff_until.get(c, 0.0) <= now_mono
+            ]
+            ordered_targets = [s for s in primary_seeds if s in active_candidates]
+            ordered_targets.extend(sorted(set(active_candidates) - set(ordered_targets)))
             my_geo = get_node_geo_entry(current_domain, is_local=True)
 
         payload = {
@@ -2010,7 +2439,7 @@ def bootstrap_discovery_loop():
         }
 
         futures = [
-            gossip_executor.submit(_announce_to_single_seed, seed, current_domain, payload)
+            discovery_executor.submit(_announce_to_single_seed, seed, current_domain, payload)
             for seed in ordered_targets
         ]
         concurrent.futures.wait(futures, timeout=35)

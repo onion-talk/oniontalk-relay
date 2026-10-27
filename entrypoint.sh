@@ -9,7 +9,9 @@ if ! mkdir -p "$DATA_DIR/tor_data" "$DATA_DIR/hidden_service" 2>/dev/null; then
     DATA_DIR="/tmp/oniontalk_data"
     mkdir -p "$DATA_DIR/tor_data" "$DATA_DIR/hidden_service"
 fi
+chown -R "$(id -u):$(id -g)" "$DATA_DIR/tor_data" "$DATA_DIR/hidden_service" 2>/dev/null || true
 chmod 700 "$DATA_DIR/tor_data" "$DATA_DIR/hidden_service"
+chmod 600 "$DATA_DIR/hidden_service/"* 2>/dev/null || true
 
 # Support optional external Tor daemon (e.g. legacy multi-container compose)
 if [ "${EXTERNAL_TOR:-0}" = "1" ]; then

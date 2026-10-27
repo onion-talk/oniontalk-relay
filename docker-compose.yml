@@ -1,34 +1,13 @@
 services:
-  tor-daemon:
-    image: osminogin/tor-simple:0.4.8.12
-    container_name: oniontalk-tor
-    restart: unless-stopped
-    volumes:
-      - tor_keys:/var/lib/tor/hidden_service
-      - ./torrc:/etc/tor/torrc:ro
-    networks:
-      - tor_net
-
   oniontalk-relay:
     build: .
+    image: eriktonon/oniontalk:latest
     container_name: oniontalk-relay
     restart: unless-stopped
     ports:
       - "127.0.0.1:${RELAY_PORT:-8080}:8080"
-    environment:
-      - TOR_HOSTNAME_FILE=/var/lib/tor/hidden_service/hostname
-      - TOR_SOCKS_PROXY=socks5h://tor-daemon:9050
-      - BOOTSTRAP_SEEDS=${BOOTSTRAP_SEEDS:-onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion,kn4u2xxl2otoo2ujv3mhehwfwbw7mtppaf56fu3nxogvv7eekf2qdrid.onion,zqdx5x7pfybox7m5rz3fe5kiouxhipvh3ekuteq2urrrvwcxjttnmgid.onion,puqjsmsyyzmxjdtcgr2fl4wrdazqd2phaqrz26alzwyletbvekkxhyyd.onion}
     volumes:
-      - tor_keys:/var/lib/tor/hidden_service:ro
-    networks:
-      - tor_net
-    depends_on:
-      - tor-daemon
+      - oniontalk_data:/data
 
 volumes:
-  tor_keys:
-
-networks:
-  tor_net:
-    driver: bridge
+  oniontalk_data:

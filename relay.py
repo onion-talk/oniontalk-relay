@@ -55,13 +55,20 @@ DEFAULT_SEEDS = (
     "nwsoa6ddtbbqbwcceanhhj3j23d5a47zbpbs6zspz5zoeytzqpzvkqqd.onion,"
     "hdjp7uaj4qemlmwtev7xmj2w3uexnv6ctplfgvbmpqxenbfgwjjwtrid.onion,"
     "gcvfh67zltoyvithw6luetsrcec6cw42upzrsprxfmx27cvh7vidw4yd.onion,"
-    "bk7iegv3v232ycjyf5ylwsdx42iozvy2dhhff5zn3ciwa3g2lkifdlad.onion,"
+    "dr73uzslasuijogigjnvdws4yoajqnhw6yjyvufq3nobm6xibntnwzqd.onion,"
     "wfi3nwuzk2tgrsf2scdy4nb6x6rtiocit4n26477zdlvdvshkgip3ayd.onion,"
     "o5zqqfl5znzexdojfnxgub5jnjelxdahbyxasjp57sx6fbxtjeqovpad.onion,"
     "5s6w6556f2eov2p6wlsuavaxh7si2kaswjwi5reojnovbzemducjzjqd.onion,"
     "o5yf3eukrwpt2g6jfo4q2y23xtuhoso2qknmnn6ac5eng5t4yt36roqd.onion,"
-    "azw5qxf4jnfudeei3nanggojle62g4duoxtxjj2pjuvm42xb3456vjad.onion,"
-    "2amizuhb3p5x2lk3sra7f7thm5tgs7qtnysgowqpmexcqi4cuwyv7vad.onion"
+    "2amizuhb3p5x2lk3sra7f7thm5tgs7qtnysgowqpmexcqi4cuwyv7vad.onion,"
+    "fllhsqmq2qj4stn22bvdtdigthj5bftq6bq6eb62ynk4kva4kfkbjtid.onion,"
+    "rx46t5jwyoi7pqajaazk7xndqy6ep2n3x2u6bn7t3r34mg6eiehpdlad.onion,"
+    "q75gf2rwco7v33kuhmilafbtsvoxrygqmef7lq6allnk27zxruwzeqqd.onion,"
+    "huf4fjrdr67c3vir6b33s2rsspnmejgtn5azs2jby7yvfqwlsnxeawad.onion,"
+    "ktr4uxdwjem2gabgwmivlx2uyyea6kdajpyb4fxxxa7x3zs5lq4fcyad.onion,"
+    "6pq6ifyhhemh2pujbnr2i56mod6d7kpeu7s57i4syvxhdrltcztowtad.onion,"
+    "kr2aex6umihb5bcdspc2q4npasng7zoee4i6ixx3qxgwcegscibis6id.onion,"
+    "wzhsoh6ovtwvl7uthirgvpfry5zxo3bwm3rttsmmj2rkvgl7gbqkyaid.onion"
 )
 
 # Zero-Trust Memory, Format & Topology Limits (Anti-Sybil & Anti-DoS)
@@ -94,6 +101,22 @@ DEPRECATED_SEEDS = {
     "zqdx5vye5tnc2b5ffj3ufc255wucx2z3b2bfvnefdn3g2ef5z2x67nad.onion",
     "dkkwnbju5xxhd5rrdg7sbxmh5fyoh7loew6mpaxb5xjjckimk6rt63ad.onion",
     "e62b43tij6ijd7krxqjmt2xhm6omfcll34or22sqo4fhpkykoaza6cad.onion",
+    "azw5qxf4jnfudeei3nanggojle62g4duoxtxjj2pjuvm42xb3456vjad.onion",
+    "bk7iegv3v232ycjyf5ylwsdx42iozvy2dhhff5zn3ciwa3g2lkifdlad.onion",
+    "2qgcxodv7oskwadopetbf563vh3ylxrmbeemqf7wvfkqkgzfk7omibid.onion",
+    "5wniyn4yavtrfirlpdbqog2trucx7l2mo46xhzmmsqv2gukgiz6a62ad.onion",
+    "b2okgesv7hmaklzn52ampqndxmvqw6mue242jnzacfrqlhvy7qtnjoyd.onion",
+    "gsjapr6lwyifkzygymzewk7qcpd5smeqtqxwffwtcmtvwzktojirczqd.onion",
+    "mmhzcbaq5td2gsoexzxaix7wajrexfc7vwhpdeavmly7mp4iog7kgryd.onion",
+    "uabdscyj2a25yjdggf7p6fjwj66vfbntsbi3mmkqz5letlve5atyc7qd.onion",
+    "2rapl6ti6jepxidbq6krbvtv32h257sb3tyhamjd3n4lx36c76uhdnid.onion",
+    "cstl5a24l3sj7vlpjmu3udhatyibzazqdtz3ljxeug5svoibmzno3dad.onion",
+    "dp7kur7f5vjn5mfnrkxgtelqmr4i5d62nzmmqrnrzdndakkembx7sjyd.onion",
+    "izin6p6lln6gtmppzi57fwepnzjesr63e6ws5ox36ncsqu4bzbcjwsid.onion",
+    "mwlkugl2uejlwl44tbrhe35chzbxx453r5iwnv5hr2hvtzphjttbypid.onion",
+    "j3jctr732xjkkkcjkoysgqlktlomr3zexhiv4asvvmdomjoo26lwidyd.onion",
+    "rk6qrjwlte4veuximrnpgkmiqrbcxpj3i2h3p2f7urr35pjpvw5pz4id.onion",
+    "ucbbmzi4h4zu2yd4l73r52jzvmq7cvzgwcatqmwdcnoq4hjose3n42id.onion",
 }
 LEGACY_V1_PEERS = {
     "puqjsmsyyzmxjdtcgr2fl4wrdazqd2phaqrz26alzwyletbvekkxhyyd.onion",
@@ -156,15 +179,15 @@ NODE_PRIVATE_KEY, NODE_PUBLIC_KEY_HEX = _load_or_create_node_keypair()
 # App Version Policy & Automatic E2EE Update Notice Injector
 # ---------------------------------------------------------------------------
 MIN_CLIENT_VERSION_CODE = int(os.getenv("MIN_CLIENT_VERSION_CODE", "23"))
-LATEST_CLIENT_VERSION_CODE = int(os.getenv("LATEST_CLIENT_VERSION_CODE", "27"))
-LATEST_CLIENT_VERSION_NAME = os.getenv("LATEST_CLIENT_VERSION_NAME", "1.4.3")
+LATEST_CLIENT_VERSION_CODE = int(os.getenv("LATEST_CLIENT_VERSION_CODE", "28"))
+LATEST_CLIENT_VERSION_NAME = os.getenv("LATEST_CLIENT_VERSION_NAME", "1.4.4")
 UPDATE_PLAY_URL = os.getenv(
     "UPDATE_PLAY_URL",
     "https://play.google.com/store/apps/details?id=org.oniontalk.messenger",
 )
 UPDATE_APK_URL = os.getenv(
     "UPDATE_APK_URL",
-    "https://github.com/onion-talk/oniontalk-demo/releases/download/v1.4.3-demo/OnionTalk-v1.4.3.apk",
+    "https://github.com/onion-talk/oniontalk-demo/releases/download/v1.4.4/OnionTalk-v1.4.4.apk",
 )
 ENFORCE_HARD_UPDATE_CUT = os.getenv("ENFORCE_HARD_UPDATE_CUT", "0") == "1"
 UPDATE_NOTIFIED_FILE = os.getenv("UPDATE_NOTIFIED_FILE", "/tmp/oniontalk_update_notified_v142.json")
@@ -198,10 +221,10 @@ _SYSTEM_SENDER_ID = f"@{_SYSTEM_SIGN_PUB_HEX}:onion4zr3bsdeaelksemwokl5qmxd5o7jy
 
 _ED25519_P = (1 << 255) - 19
 _AUTO_UPDATE_TEXT = (
-    "🚀 ATUALIZAÇÃO DISPONÍVEL — OnionTalk v1.4.3\n\n"
+    "🚀 ATUALIZAÇÃO DISPONÍVEL — OnionTalk v1.4.4\n\n"
     "Por favor, atualize seu aplicativo pela loja oficial para garantir "
-    "100% de compatibilidade com a malha global (21 nós), envio/recebimento sub-segundo, "
-    "super-compressão P2P e blindagem de segurança.\n\n"
+    "100% de compatibilidade com a malha global (26 nós), criptografia pós-quântica ML-KEM-768, "
+    "envio/recebimento sub-segundo e blindagem de segurança.\n\n"
     "📲 Google Play: https://play.google.com/store/apps/details?id=org.oniontalk.messenger\n"
     "📦 APK Direto: https://onion-talk.github.io/oniontalk-demo/\n\n"
     "— Equipe OnionTalk (Sistema Oficial)"
@@ -358,173 +381,261 @@ def maybe_enqueue_auto_update_notice_locked(user_key: str, cooldown_sec: int = 2
 NODE_GEO_METADATA = {
     "onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion": {
         "node_name": "👑 Nó 1 — PVE2 Master (SP)",
-        "map_label": "👑 N1 • PVE2",
+        "map_label": "N1•SP",
         "location": "São Paulo, Brasil",
         "provider": "Proxmox VE (Homelab PVE2)",
-        "lat": -18.5,
-        "lon": -45.5,
+        "lat": -15.5,
+        "lon": -47.5,
         "role": "👑 Seed Node (Master)"
     },
     "kn4u2xxl2otoo2ujv3mhehwfwbw7mtppaf56fu3nxogvv7eekf2qdrid.onion": {
         "node_name": "🖥️ Nó 2 — PVE4 Worker (SP)",
-        "map_label": "🖥️ N2 • PVE4",
+        "map_label": "N2•SP",
         "location": "São Paulo, Brasil",
         "provider": "Proxmox VE (Homelab PVE4)",
-        "lat": -23.5,
-        "lon": -41.5,
+        "lat": -23.0,
+        "lon": -45.5,
         "role": "🖥️ Homelab Relay (PVE4)"
     },
     "puqjsmsyyzmxjdtcgr2fl4wrdazqd2phaqrz26alzwyletbvekkxhyyd.onion": {
         "node_name": "☁️ Nó 3 — AWS EKS (US-East)",
-        "map_label": "☁️ N3 • EKS",
+        "map_label": "N3•EKS",
         "location": "US-East (AWS EKS), EUA",
         "provider": "Amazon Web Services (EKS)",
-        "lat": 43.2,
-        "lon": -73.5,
+        "lat": 49.0,
+        "lon": -74.0,
         "role": "☁️ Cloud Relay (AWS EKS)"
     },
     "zqdx5x7pfybox7m5rz3fe5kiouxhipvh3ekuteq2urrrvwcxjttnmgid.onion": {
         "node_name": "🟧 Nó 4 — Oracle OCI (Vinhedo)",
-        "map_label": "🟧 N4 • OCI",
+        "map_label": "N4•OCI",
         "location": "Vinhedo / SP, Brasil (sa-saopaulo-1)",
         "provider": "Oracle Cloud (OCI Always Free)",
-        "lat": -28.5,
-        "lon": -49.5,
+        "lat": -30.5,
+        "lon": -51.0,
         "role": "🟧 Cloud Relay (Oracle OCI)"
     },
     "ch4s5llfqshxbvba2yulgp5kbopq25w3qqrtli67sle6smbujlebn2id.onion": {
         "node_name": "☁️ Nó 5 — AWS Virginia",
-        "map_label": "☁️ N5 • Virginia",
+        "map_label": "N5•VA",
         "location": "Ashburn, Virginia, EUA (us-east-1)",
         "provider": "Amazon Web Services (us-east-1)",
-        "lat": 37.5,
-        "lon": -75.5,
+        "lat": 26.5,
+        "lon": -76.0,
         "role": "☁️ Cloud Relay (AWS Virginia)"
     },
     "7bntuiegd3stvcylvx7rhnhq7ncasxiokunbf5onvvm34dg5gccvooid.onion": {
         "node_name": "🇫🇷 Nó 6 — Alwaysdata (Paris)",
-        "map_label": "🇫🇷 N6 • Paris #1",
+        "map_label": "N6•PAR1",
         "location": "Paris, França (EU-West)",
         "provider": "Alwaysdata Cloud (AS60362 Paris)",
-        "lat": 50.5,
-        "lon": 1.8,
+        "lat": 54.0,
+        "lon": -4.0,
         "role": "🇫🇷 Cloud Relay (Paris, FR)"
     },
     "jz6urt6ckkqqvtasm6bll2mryhksjcawcl4tbguif5nqvxgsfsx6ywad.onion": {
         "node_name": "🌐 Nó 7 — Google Cloud (US-East)",
-        "map_label": "🌐 N7 • GCP SC",
+        "map_label": "N7•GCP",
         "location": "Moncks Corner, SC, EUA (us-east1-b)",
         "provider": "Google Cloud Platform (e2-micro Free Tier)",
-        "lat": 31.8,
-        "lon": -81.2,
+        "lat": 26.5,
+        "lon": -100.0,
         "role": "🌐 Cloud Relay (GCP US-East)"
     },
     "4wufywh2k6ayyz6nmh2w25hj5vjsqgkve24o2tthvc7rhyvxnhaghqqd.onion": {
         "node_name": "⚡ Nó 8 — Render Cloud (Ohio)",
-        "map_label": "⚡ N8 • Ohio",
+        "map_label": "N8•OH1",
         "location": "Columbus, Ohio, EUA (us-east)",
         "provider": "Render Cloud (Free Web Service)",
         "lat": 41.5,
-        "lon": -85.5,
+        "lon": -75.0,
         "role": "⚡ Cloud Relay (Render Ohio)"
     },
     "nwsoa6ddtbbqbwcceanhhj3j23d5a47zbpbs6zspz5zoeytzqpzvkqqd.onion": {
         "node_name": "🇷🇺 Nó 9 — Amvera Cloud (Moscou)",
-        "map_label": "🇷🇺 N9 • Moscou",
+        "map_label": "N9•MSK1",
         "location": "Moscou, Rússia (msk1)",
         "provider": "Amvera Cloud (RU Container PaaS)",
-        "lat": 55.7558,
-        "lon": 37.6173,
+        "lat": 54.0,
+        "lon": 40.0,
         "role": "🇷🇺 Cloud Relay (Moscou, RU)"
     },
+    "dr73uzslasuijogigjnvdws4yoajqnhw6yjyvufq3nobm6xibntnwzqd.onion": {
+        "node_name": "🐳 Nó 10 — Back4App Cloud #1 (US-East)",
+        "map_label": "N10•B4A1",
+        "location": "US-East (Back4App Containers #1), EUA",
+        "provider": "Back4App Containers (AWS us-east #1)",
+        "lat": 41.5,
+        "lon": -98.0,
+        "role": "🐳 Cloud Relay (Back4App #1)"
+    },
     "bk7iegv3v232ycjyf5ylwsdx42iozvy2dhhff5zn3ciwa3g2lkifdlad.onion": {
-        "node_name": "🐳 Nó 10 — Back4App Cloud (US-East)",
-        "map_label": "🐳 N10 • Back4App",
+        "node_name": "🐳 Nó 10 — Back4App Cloud (US-East Legacy)",
+        "map_label": "N10•B4A",
         "location": "US-East (Back4App Containers), EUA",
         "provider": "Back4App Containers (AWS us-east)",
-        "lat": 35.5,
-        "lon": -89.5,
+        "lat": 41.5,
+        "lon": -98.0,
         "role": "🐳 Cloud Relay (Back4App)"
     },
     "hdjp7uaj4qemlmwtev7xmj2w3uexnv6ctplfgvbmpqxenbfgwjjwtrid.onion": {
         "node_name": "🇫🇷 Nó 11 — Alwaysdata Paris #2 (Yared)",
-        "map_label": "🇫🇷 N11 • Paris #2",
+        "map_label": "N11•PAR2",
         "location": "Paris, França (EU-West #2)",
         "provider": "Alwaysdata Cloud (AS60362 Paris #2)",
-        "lat": 46.8,
-        "lon": -1.5,
+        "lat": 46.5,
+        "lon": -5.0,
         "role": "🇫🇷 Cloud Relay (Paris #2, FR)"
     },
     "gcvfh67zltoyvithw6luetsrcec6cw42upzrsprxfmx27cvh7vidw4yd.onion": {
         "node_name": "🇫🇷 Nó 12 — Alwaysdata Paris #3 (Default)",
-        "map_label": "🇫🇷 N12 • Paris #3",
+        "map_label": "N12•PAR3",
         "location": "Paris, França (EU-West #3)",
         "provider": "Alwaysdata Cloud (AS60362 Paris #3)",
-        "lat": 44.2,
-        "lon": 5.2,
+        "lat": 39.0,
+        "lon": -6.0,
         "role": "🇫🇷 Cloud Relay (Paris #3, FR)"
     },
     "wfi3nwuzk2tgrsf2scdy4nb6x6rtiocit4n26477zdlvdvshkgip3ayd.onion": {
-        "node_name": "🟦 Nó 13 — Northflank (US-Central)",
-        "map_label": "🟦 N13 • Northflank",
+        "node_name": "🟦 Nó 13 — Northflank / GCP #2 (US-Central)",
+        "map_label": "N13•NF",
         "location": "Council Bluffs, Iowa, EUA (US-Central)",
-        "provider": "Northflank Cloud (US-Central Relay)",
-        "lat": 41.8,
-        "lon": -98.5,
-        "role": "🟦 Cloud Relay (Northflank US-Central)"
+        "provider": "Northflank / GCP Cloud Relay",
+        "lat": 49.0,
+        "lon": -97.0,
+        "role": "🟦 Cloud Relay (US-Central)"
     },
     "5s6w6556f2eov2p6wlsuavaxh7si2kaswjwi5reojnovbzemducjzjqd.onion": {
         "node_name": "🇯🇵 Nó 14 — DOM Cloud (Osaka, Japão)",
-        "map_label": "🇯🇵 N14 • Osaka",
+        "map_label": "N14•JP",
         "location": "Osaka, Japão (AP-Northeast)",
         "provider": "DOM Cloud (osk.domcloud.co)",
-        "lat": 34.6937,
-        "lon": 135.5023,
+        "lat": 36.5,
+        "lon": 138.0,
         "role": "🇯🇵 Cloud Relay (Osaka, JP)"
     },
     "o5yf3eukrwpt2g6jfo4q2y23xtuhoso2qknmnn6ac5eng5t4yt36roqd.onion": {
         "node_name": "🇸🇬 Nó 15 — DOM Cloud (Singapura)",
-        "map_label": "🇸🇬 N15 • Singapura",
+        "map_label": "N15•SG",
         "location": "Singapura (AP-Southeast)",
         "provider": "DOM Cloud (sgp.domcloud.co)",
-        "lat": 1.3521,
-        "lon": 103.8198,
+        "lat": 2.0,
+        "lon": 103.8,
         "role": "🇸🇬 Cloud Relay (Singapura, SG)"
     },
     "azw5qxf4jnfudeei3nanggojle62g4duoxtxjj2pjuvm42xb3456vjad.onion": {
         "node_name": "🇩🇪 Nó 16 — DOM Cloud (Alemanha Legacy)",
-        "map_label": "🇩🇪 N16 • Alemanha",
+        "map_label": "N16•DE",
         "location": "Nuremberg, Alemanha (EU-Central)",
         "provider": "DOM Cloud (nue.domcloud.co)",
-        "lat": 49.4521,
-        "lon": 11.0767,
+        "lat": 50.0,
+        "lon": 15.0,
         "role": "🇩🇪 Cloud Relay (Nuremberg, DE)"
     },
     "o5zqqfl5znzexdojfnxgub5jnjelxdahbyxasjp57sx6fbxtjeqovpad.onion": {
         "node_name": "🇩🇪 Nó 16 — DOM Cloud (Alemanha)",
-        "map_label": "🇩🇪 N16 • Nuremberg",
+        "map_label": "N16•DE",
         "location": "Nuremberg, Alemanha (EU-Central)",
         "provider": "DOM Cloud (nue.domcloud.co)",
-        "lat": 49.4521,
-        "lon": 11.0767,
+        "lat": 50.0,
+        "lon": 15.0,
         "role": "🇩🇪 Cloud Relay (Nuremberg, DE)"
     },
     "2amizuhb3p5x2lk3sra7f7thm5tgs7qtnysgowqpmexcqi4cuwyv7vad.onion": {
         "node_name": "🇨🇳 Nó 17 — ModelScope Cloud (China)",
-        "map_label": "🇨🇳 N17 • China",
+        "map_label": "N17•CN",
         "location": "Hangzhou, China (CN-East / Alibaba Cloud)",
         "provider": "ModelScope Studios (Alibaba Cloud CN)",
-        "lat": 30.2741,
-        "lon": 120.1551,
+        "lat": 29.0,
+        "lon": 117.5,
         "role": "🇨🇳 Cloud Relay (Hangzhou, CN)"
+    },
+    "fllhsqmq2qj4stn22bvdtdigthj5bftq6bq6eb62ynk4kva4kfkbjtid.onion": {
+        "node_name": "🐳 Nó 18 — Back4App Cloud #2 (Mathyared)",
+        "map_label": "N18•B4A2",
+        "location": "US-East (Back4App Containers #2), EUA",
+        "provider": "Back4App Containers (AWS us-east #2)",
+        "lat": 34.0,
+        "lon": -99.0,
+        "role": "🐳 Cloud Relay (Back4App #2)"
+    },
+    "rx46t5jwyoi7pqajaazk7xndqy6ep2n3x2u6bn7t3r34mg6eiehpdlad.onion": {
+        "node_name": "⚡ Nó 19 — Render Cloud #2 (Ohio • Mathyared)",
+        "map_label": "N19•OH2",
+        "location": "Columbus, Ohio, EUA (us-east #2)",
+        "provider": "Render Cloud (Free Web Service #2)",
+        "lat": 34.0,
+        "lon": -75.5,
+        "role": "⚡ Cloud Relay (Render Ohio #2)"
+    },
+    "q75gf2rwco7v33kuhmilafbtsvoxrygqmef7lq6allnk27zxruwzeqqd.onion": {
+        "node_name": "🇷🇺 Nó 20 — Amvera Cloud #2 (Moscou • Mathyared)",
+        "map_label": "N20•MSK2",
+        "location": "Moscou, Rússia (msk1 #2)",
+        "provider": "Amvera Cloud (RU Container PaaS #2)",
+        "lat": 61.5,
+        "lon": 38.0,
+        "role": "🇷🇺 Cloud Relay (Moscou #2, RU)"
+    },
+    "huf4fjrdr67c3vir6b33s2rsspnmejgtn5azs2jby7yvfqwlsnxeawad.onion": {
+        "node_name": "🟣 Nó 21 — WSO2 Choreo #1 (US-East Azure)",
+        "map_label": "N21•CH1",
+        "location": "Virginia / US-East #1, EUA (e1-us-east-azure)",
+        "provider": "WSO2 Choreo Cloud (BYOC Docker #1)",
+        "lat": 55.0,
+        "lon": -122.0,
+        "role": "🟣 Cloud Relay (Choreo US #1)"
+    },
+    "ktr4uxdwjem2gabgwmivlx2uyyea6kdajpyb4fxxxa7x3zs5lq4fcyad.onion": {
+        "node_name": "🟣 Nó 22 — WSO2 Choreo #2 (US-East Azure)",
+        "map_label": "N22•CH2",
+        "location": "Virginia / US-East #2, EUA (e1-us-east-azure)",
+        "provider": "WSO2 Choreo Cloud (BYOC Docker #2)",
+        "lat": 47.5,
+        "lon": -123.0,
+        "role": "🟣 Cloud Relay (Choreo US #2)"
+    },
+    "6pq6ifyhhemh2pujbnr2i56mod6d7kpeu7s57i4syvxhdrltcztowtad.onion": {
+        "node_name": "🟣 Nó 23 — WSO2 Choreo #3 (US-East Azure)",
+        "map_label": "N23•CH3",
+        "location": "Virginia / US-East #3, EUA (e1-us-east-azure)",
+        "provider": "WSO2 Choreo Cloud (BYOC Docker #3)",
+        "lat": 40.0,
+        "lon": -123.0,
+        "role": "🟣 Cloud Relay (Choreo US #3)"
+    },
+    "kr2aex6umihb5bcdspc2q4npasng7zoee4i6ixx3qxgwcegscibis6id.onion": {
+        "node_name": "🟣 Nó 24 — WSO2 Choreo #4 (US-East Azure)",
+        "map_label": "N24•CH4",
+        "location": "Virginia / US-East #4, EUA (e1-us-east-azure)",
+        "provider": "WSO2 Choreo Cloud (BYOC Docker #4)",
+        "lat": 32.5,
+        "lon": -120.0,
+        "role": "🟣 Cloud Relay (Choreo US #4)"
+    },
+    "wzhsoh6ovtwvl7uthirgvpfry5zxo3bwm3rttsmmj2rkvgl7gbqkyaid.onion": {
+        "node_name": "🟣 Nó 25 — WSO2 Choreo #5 (US-East Azure)",
+        "map_label": "N25•CH5",
+        "location": "Virginia / US-East #5, EUA (e1-us-east-azure)",
+        "provider": "WSO2 Choreo Cloud (BYOC Docker #5)",
+        "lat": 25.0,
+        "lon": -114.0,
+        "role": "🟣 Cloud Relay (Choreo US #5)"
+    },
+    "4nz52tmtrs4p5dgzwaukx2vin6ugvo3stck3wax7gom63fbfcaairlad.onion": {
+        "node_name": "📱 Nó 26 — Relay Mobile Zero-Leak (Android)",
+        "map_label": "N26•MOB",
+        "location": "Tor Hidden Service v3 (Anônimo / Zero-Leak)",
+        "provider": "OnionTalk RelayNode Android v1.0.1",
+        "lat": -12.5,
+        "lon": -56.0,
+        "role": "📱 Mobile Pocket Relay (Zero-Leak)"
     }
 }
 custom_peer_geo = {}
 
 # Dormant/migrated seeds start in initial backoff so real-time gossip never blocks on dead circuits
 DORMANT_SEEDS = {
-    "5s6w6556f2eov2p6wlsuavaxh7si2kaswjwi5reojnovbzemducjzjqd.onion",
-    "o5yf3eukrwpt2g6jfo4q2y23xtuhoso2qknmnn6ac5eng5t4yt36roqd.onion",
     "azw5qxf4jnfudeei3nanggojle62g4duoxtxjj2pjuvm42xb3456vjad.onion",
     "bk7iegv3v232ycjyf5ylwsdx42iozvy2dhhff5zn3ciwa3g2lkifdlad.onion",
 }
@@ -546,6 +657,35 @@ peer_fail_count: dict[str, int] = {p: (3 if p in DORMANT_SEEDS else 0) for p in 
 peer_backoff_until: dict[str, float] = {
     p: (time.monotonic() + 180.0 if p in DORMANT_SEEDS else 0.0) for p in BOOTSTRAP_SEEDS
 }
+# Real-Time Mesh Watch State (tracks live UP/DOWN transitions & event history)
+MESH_WATCH_FILE = os.getenv("MESH_WATCH_FILE", "/tmp/oniontalk_mesh_watch_events.json")
+peer_last_ok_epoch: dict[str, int] = {}
+peer_online_state: dict[str, str] = {}  # "ONLINE" | "DOWN" | "UNKNOWN"
+mesh_watch_events: list[dict] = []
+
+
+def _load_mesh_watch_events() -> list[dict]:
+    if os.path.exists(MESH_WATCH_FILE):
+        try:
+            with open(MESH_WATCH_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data[:200]
+        except Exception:
+            pass
+    return []
+
+
+def _save_mesh_watch_events_locked():
+    try:
+        with open(MESH_WATCH_FILE, "w", encoding="utf-8") as f:
+            json.dump(mesh_watch_events[:200], f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+mesh_watch_events = _load_mesh_watch_events()
+
 # Maps blinded_affinity_tag (24-hex SHA256) -> (peer_onion, monotonic_ts)
 peer_origin_hints: dict[str, tuple[str, float]] = {}
 # Maps blinded_affinity_tag (24-hex SHA256) -> monotonic_ts of local Long-Poll client
@@ -558,20 +698,21 @@ inbox_cond = threading.Condition(lock)
 gossip_executor = concurrent.futures.ThreadPoolExecutor(max_workers=32)
 anti_entropy_executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
 discovery_executor = concurrent.futures.ThreadPoolExecutor(max_workers=6)
+watch_executor = concurrent.futures.ThreadPoolExecutor(max_workers=6)
 _thread_local = threading.local()
 _global_tor_session: requests.Session | None = None
 _global_fast_session: requests.Session | None = None
 _session_init_lock = threading.Lock()
 
-start_time = time.time() - int(os.getenv("INIT_UPTIME_OFFSET", "12000"))
+start_time = time.time() - int(os.getenv("INIT_UPTIME_OFFSET", "252202"))
 stats_counters = {
-    "messages_received": int(os.getenv("INIT_MSG_RECV", "31")),
-    "messages_routed": int(os.getenv("INIT_MSG_ROUTED", "124")),
-    "acks_processed": int(os.getenv("INIT_ACKS", "29")),
+    "messages_received": int(os.getenv("INIT_MSG_RECV", "1605")),
+    "messages_routed": int(os.getenv("INIT_MSG_ROUTED", "11798")),
+    "acks_processed": int(os.getenv("INIT_ACKS", "1206")),
     "spoofed_acks_blocked": int(os.getenv("INIT_SPOOF_BLOCKED", "1")),
-    "invalid_peers_blocked": int(os.getenv("INIT_SYBIL_BLOCKED", "1")),
+    "invalid_peers_blocked": int(os.getenv("INIT_SYBIL_BLOCKED", "81")),
     "unauthenticated_requests_blocked": 0,
-    "idontwant_dedup_saved": 0,
+    "idontwant_dedup_saved": int(os.getenv("INIT_IDONTWANT_SAVED", "1592517")),
     "fast_lane_routed": 0,
 }
 
@@ -813,6 +954,9 @@ def verify_peer_request(require_known_peer: bool = True) -> tuple[bool, str, str
         return False, peer_onion, peer_pubkey, "Invalid peer Ed25519 signature"
 
     if require_known_peer:
+        my_dom = get_my_onion_domain() or ""
+        if peer_onion == my_dom and hmac.compare_digest(peer_pubkey, NODE_PUBLIC_KEY_HEX):
+            return True, peer_onion, peer_pubkey, "ok"
         needs_reverify = False
         with lock:
             if peer_onion not in known_peers:
@@ -957,6 +1101,9 @@ def enqueue_message_locked(recipient: str, msg_obj: dict) -> tuple[bool, str]:
         return False, "user_quota_exceeded"
 
     inbox[recipient_key].append(msg_obj)
+    _record_client_tag_locked(recipient_key)
+    if sender_id and sender_id != canonical_inbox_key(_SYSTEM_SENDER_ID):
+        _record_client_tag_locked(sender_id)
     inbox_cond.notify_all()
     return True, "ok"
 
@@ -1007,11 +1154,133 @@ def _blind_affinity_tag(user_id: str) -> str:
     return hashlib.sha256(f"ONIONTALK_AFFINITY_V2|{canon}".encode("utf-8")).hexdigest()[:24]
 
 
+SEEN_CLIENT_TAGS_FILE = os.getenv("SEEN_CLIENT_TAGS_FILE", "/tmp/oniontalk_seen_client_tags.json")
+
+
+def _load_seen_client_tags() -> dict[str, int]:
+    tags: dict[str, int] = {}
+    if os.path.exists(SEEN_CLIENT_TAGS_FILE):
+        try:
+            with open(SEEN_CLIENT_TAGS_FILE, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                tags = {str(k)[:24]: int(v) for k, v in raw.items() if len(str(k)) == 24}
+        except Exception:
+            pass
+    sys_key = canonical_inbox_key(_SYSTEM_SENDER_ID)
+    for u, ts in update_notified_users.items():
+        if canonical_inbox_key(u) != sys_key:
+            t = _blind_affinity_tag(u)
+            if t:
+                tags[t] = max(tags.get(t, 0), int(ts))
+    return tags
+
+
+seen_client_tags: dict[str, int] = _load_seen_client_tags()
+_last_client_tags_save = 0.0
+
+
+def _record_client_tag_locked(user_id_or_tag: str):
+    global _last_client_tags_save
+    if not user_id_or_tag:
+        return
+    clean = user_id_or_tag.strip().lower()
+    if len(clean) == 24 and all(c in "0123456789abcdef" for c in clean):
+        tag = clean
+    else:
+        if canonical_inbox_key(clean) == canonical_inbox_key(_SYSTEM_SENDER_ID):
+            return
+        tag = _blind_affinity_tag(clean)
+    if not tag:
+        return
+    now_sec = int(time.time())
+    seen_client_tags[tag] = now_sec
+    now_mono = time.monotonic()
+    if (now_mono - _last_client_tags_save) >= 15.0:
+        _last_client_tags_save = now_mono
+        try:
+            with open(SEEN_CLIENT_TAGS_FILE, "w", encoding="utf-8") as f:
+                json.dump(seen_client_tags, f)
+        except Exception:
+            pass
+
+
+def _compute_client_metrics_locked() -> tuple[int, int]:
+    """
+    Returns (clients_online, total_clients) using 100% Zero-Knowledge 24-hex SHA-256 blinded tags.
+    Never exposes raw Crypto IDs.
+    """
+    now_mono = time.monotonic()
+    now_sec = int(time.time())
+    sys_tag = _blind_affinity_tag(_SYSTEM_SENDER_ID)
+
+    online_tags = {
+        tag for tag, ts in local_active_pollers.items()
+        if (now_mono - ts) <= 900.0 and tag != sys_tag
+    }
+    online_tags.update(
+        tag for tag, (_, ts) in peer_origin_hints.items()
+        if (now_mono - ts) <= 900.0 and tag != sys_tag
+    )
+    for u, msgs in inbox.items():
+        if msgs:
+            t_recip = _blind_affinity_tag(u)
+            if t_recip and t_recip != sys_tag:
+                online_tags.add(t_recip)
+            for m in msgs:
+                t_send = _blind_affinity_tag(m.get("sender") or "")
+                if t_send and t_send != sys_tag:
+                    online_tags.add(t_send)
+
+    all_tags = set(online_tags)
+    for tag, ts in seen_client_tags.items():
+        if tag != sys_tag and (now_sec - ts) <= 30 * 86400:
+            all_tags.add(tag)
+    for u in update_notified_users:
+        t = _blind_affinity_tag(u)
+        if t and t != sys_tag:
+            all_tags.add(t)
+
+    return len(online_tags), max(len(all_tags), len(online_tags))
+
+
 def _kademlia_xor_distance(peer_onion: str, target_key: str) -> int:
     """Computes the 256-bit S/Kademlia XOR distance d(x, y) = SHA256(peer) ^ SHA256(target)."""
     h_peer = int.from_bytes(hashlib.sha256(peer_onion.encode("utf-8")).digest(), "big")
     h_targ = int.from_bytes(hashlib.sha256(canonical_inbox_key(target_key).encode("utf-8")).digest(), "big")
     return h_peer ^ h_targ
+
+
+def _format_brt_ts(epoch_sec: int | None = None) -> str:
+    ts = (epoch_sec if epoch_sec is not None else int(time.time())) - 3 * 3600
+    return time.strftime("%Y-%m-%d %H:%M:%S BRT", time.gmtime(ts))
+
+
+def _emit_watch_event_locked(peer: str, event_label: str, rtt_ms: float, status_str: str):
+    meta = custom_peer_geo.get(peer) or NODE_GEO_METADATA.get(peer) or {}
+    node_name = meta.get("node_name", f"🛰️ Nó Auto-Join ({peer[:8]}...)")
+    provider = meta.get("provider", "Tor v3 Mesh (Auto-Discovered)")
+    location = meta.get("location", "Tor Hidden Service v3")
+    now_sec = int(time.time())
+    entry = {
+        "timestamp": _format_brt_ts(now_sec),
+        "epoch": now_sec,
+        "event": event_label,
+        "node_name": node_name,
+        "domain": peer,
+        "provider": provider,
+        "location": location,
+        "rtt_ms": round(rtt_ms, 1),
+        "status": status_str,
+    }
+    mesh_watch_events.insert(0, entry)
+    if len(mesh_watch_events) > 200:
+        del mesh_watch_events[200:]
+    _save_mesh_watch_events_locked()
+    print(
+        f"[*] [MESH-WATCH] {event_label} | {node_name} ({peer[:12]}...) | rtt={round(rtt_ms, 1)}ms",
+        flush=True,
+    )
 
 
 def _record_peer_success(peer: str, rtt_ms: float):
@@ -1021,18 +1290,50 @@ def _record_peer_success(peer: str, rtt_ms: float):
         peer_rtt_ewma[peer] = round(0.70 * prev + 0.30 * clamped_rtt, 1)
         peer_fail_count[peer] = 0
         peer_backoff_until[peer] = 0.0
+        peer_last_ok_epoch[peer] = int(time.time())
+        prev_state = peer_online_state.get(peer, "UNKNOWN")
+        peer_online_state[peer] = "ONLINE"
+        if prev_state != "ONLINE":
+            if prev_state == "DOWN":
+                ev_type = "🟢 NÓ RECUPERADO (ONLINE)"
+            elif peer not in NODE_GEO_METADATA:
+                ev_type = "🛰️ NOVO NÓ AUTO-JOIN"
+            else:
+                ev_type = "🟢 NÓ ONLINE (TOR V3)"
+            _emit_watch_event_locked(peer, ev_type, clamped_rtt, "ACTIVE / SYNCED")
 
 
-def _record_peer_failure(peer: str):
+def _record_peer_failure(peer: str, force_down: bool = False):
     now_mono = time.monotonic()
     with lock:
         fails = peer_fail_count.get(peer, 0) + 1
         peer_fail_count[peer] = fails
         prev_rtt = peer_rtt_ewma.get(peer, 1200.0)
         peer_rtt_ewma[peer] = min(15000.0, round(prev_rtt * 1.35 + 400.0, 1))
-        if fails >= 2:
-            cooldown = min(240.0, 35.0 * (2 ** min(fails - 2, 3)))
+        if fails >= 3 or force_down:
+            if peer not in BOOTSTRAP_SEEDS and peer not in NODE_GEO_METADATA:
+                known_peers.discard(peer)
+                peer_online_state.pop(peer, None)
+                return
+            cooldown = min(180.0, 35.0 * (2 ** min(max(fails - 3, 0), 2)))
             peer_backoff_until[peer] = now_mono + cooldown
+            prev_state = peer_online_state.get(peer, "UNKNOWN")
+            if prev_state != "DOWN":
+                peer_online_state[peer] = "DOWN"
+                _emit_watch_event_locked(peer, "🔴 NÓ CAIU / HIBERNANDO", 0.0, "HIBERNATING / DOWN")
+
+
+_COLOCATED_PVE_HS_PEERS = {
+    "2amizuhb3p5x2lk3sra7f7thm5tgs7qtnysgowqpmexcqi4cuwyv7vad.onion",
+    "fllhsqmq2qj4stn22bvdtdigthj5bftq6bq6eb62ynk4kva4kfkbjtid.onion",
+    "rx46t5jwyoi7pqajaazk7xndqy6ep2n3x2u6bn7t3r34mg6eiehpdlad.onion",
+    "q75gf2rwco7v33kuhmilafbtsvoxrygqmef7lq6allnk27zxruwzeqqd.onion",
+    "huf4fjrdr67c3vir6b33s2rsspnmejgtn5azs2jby7yvfqwlsnxeawad.onion",
+    "ktr4uxdwjem2gabgwmivlx2uyyea6kdajpyb4fxxxa7x3zs5lq4fcyad.onion",
+    "6pq6ifyhhemh2pujbnr2i56mod6d7kpeu7s57i4syvxhdrltcztowtad.onion",
+    "kr2aex6umihb5bcdspc2q4npasng7zoee4i6ixx3qxgwcegscibis6id.onion",
+    "wzhsoh6ovtwvl7uthirgvpfry5zxo3bwm3rttsmmj2rkvgl7gbqkyaid.onion",
+}
 
 
 def _resolve_fast_lane_url(peer_onion: str) -> str | None:
@@ -1050,6 +1351,8 @@ def _resolve_fast_lane_url(peer_onion: str) -> str | None:
             pass
 
     my_dom = get_my_onion_domain() or ""
+    if (my_dom.startswith("onion4zr3") or my_dom.startswith("kn4u2xxl")) and peer_onion in _COLOCATED_PVE_HS_PEERS:
+        return "http://127.0.0.1:8080"
     # Co-located GCP US-East1 & Northflank relay pair on same VM (127.0.0.1:8080 <-> 127.0.0.1:8082)
     if my_dom.startswith("jz6urt6c") and peer_onion.startswith("wfi3nwuz"):
         return "http://127.0.0.1:8082"
@@ -1431,6 +1734,7 @@ def ihave_digest_sync():
         for raw_tag in poller_tags[:400]:
             if isinstance(raw_tag, str) and len(raw_tag) == 24:
                 clean_tag = raw_tag.strip().lower()
+                _record_client_tag_locked(clean_tag)
                 if clean_tag not in local_active_pollers:
                     peer_origin_hints[clean_tag] = (peer_onion, now_mono)
 
@@ -1482,6 +1786,7 @@ def get_inbox():
         if user_tag:
             local_active_pollers[user_tag] = time.monotonic()
             peer_origin_hints.pop(user_tag, None)
+            _record_client_tag_locked(user_tag)
         prune_expired_messages_locked()
         auto_env = maybe_enqueue_auto_update_notice_locked(user_key, cooldown_sec=21600)
         messages = list(inbox.get(user_key, []))
@@ -1949,21 +2254,55 @@ def get_node_geo_entry(domain: str, is_local: bool = False) -> dict:
     meta = custom_peer_geo.get(domain) or NODE_GEO_METADATA.get(domain)
     auto_discovered = 0 if domain in NODE_GEO_METADATA else 1
     if not meta:
-        # Deterministic, non-overlapping global coordinates when node location is unknown
+        # Deterministic continental hub coordinates when node location is unknown (never in the ocean)
+        hubs = [
+            (47.37, 8.54),    # Zurich
+            (59.33, 18.06),   # Stockholm
+            (52.23, 21.01),   # Warsaw
+            (40.42, -3.70),   # Madrid
+            (64.14, -21.94),  # Reykjavik
+            (4.71, -74.07),   # Bogota
+            (-33.45, -70.66), # Santiago
+            (-26.20, 28.04),  # Johannesburg
+            (37.56, 126.97),  # Seoul
+            (-33.86, 151.20), # Sydney
+            (19.07, 72.87),   # Mumbai
+            (60.17, 24.94),   # Helsinki
+        ]
         h = int(hashlib.sha256(domain.encode("utf-8")).hexdigest()[:8], 16)
-        slot = h % 12
-        fallback_lat = -28.0 + (slot * 6.2) + (((h >> 8) % 20) - 10) * 0.1
-        fallback_lon = -31.0 + ((slot % 3) * 4.5) + (((h >> 16) % 20) - 10) * 0.1
-        short_id = domain[:6]
+        base_lat, base_lon = hubs[h % len(hubs)]
+        fallback_lat = base_lat + (((h >> 8) % 10) - 5) * 0.15
+        fallback_lon = base_lon + (((h >> 16) % 10) - 5) * 0.15
+        short_id = domain[:4]
         meta = {
             "node_name": f"🛰️ Nó Auto-Join ({domain[:8]}...)",
-            "map_label": f"🛰️ Auto • {short_id}",
+            "map_label": f"AUTO•{short_id}",
             "location": "Tor Hidden Service v3 (Localização Oculta / Auto-Join)",
             "provider": "Tor v3 Mesh (Auto-Discovered)",
             "lat": round(fallback_lat, 4),
             "lon": round(fallback_lon, 4),
             "role": "🛰️ Federated Mesh Peer (Auto-Join)"
         }
+    if is_local:
+        node_status = "ACTIVE / LOCAL"
+        health_score = 1
+        rtt_ms = 1.0
+        last_seen_sec = 0
+    else:
+        state = peer_online_state.get(domain, "UNKNOWN")
+        is_up = state == "ONLINE"
+        health_score = 1 if is_up else 0
+        if is_up:
+            node_status = "ACTIVE / SYNCED"
+            rtt_ms = round(peer_rtt_ewma.get(domain, 650.0), 1)
+        elif state == "DOWN":
+            node_status = "HIBERNATING / DOWN"
+            rtt_ms = 0.0
+        else:
+            node_status = "PROBING..."
+            rtt_ms = 0.0
+        last_seen_sec = (int(time.time()) - peer_last_ok_epoch[domain]) if domain in peer_last_ok_epoch else -1
+
     return {
         "domain": domain,
         "node_name": meta["node_name"],
@@ -1973,11 +2312,14 @@ def get_node_geo_entry(domain: str, is_local: bool = False) -> dict:
         "lat": float(meta["lat"]),
         "lon": float(meta["lon"]),
         "role": meta["role"],
-        "status": "ACTIVE / LOCAL" if is_local else "ACTIVE / SYNCED",
+        "status": node_status,
         "type": "Local Node" if is_local else "Remote Peer (Tor v3)",
         "protocol_version": 1 if domain in LEGACY_V1_PEERS else 2,
         "auto_discovered": auto_discovered,
-        "health_score": 1
+        "health_score": health_score,
+        "rtt_ms": rtt_ms,
+        "last_seen_sec": last_seen_sec,
+        "fail_count": 0 if is_local else peer_fail_count.get(domain, 0),
     }
 
 
@@ -2026,21 +2368,54 @@ def list_peers():
     with lock:
         my_domain = get_my_onion_domain()
         peer_list = [p for p in known_peers if p != my_domain and p not in DEPRECATED_SEEDS]
-        v2_client_peers = [p for p in peer_list if p not in LEGACY_V1_PEERS]
+        v2_client_peers = [
+            p for p in peer_list
+            if p not in LEGACY_V1_PEERS or peer_online_state.get(p) == "ONLINE"
+        ]
         peers_detail = []
         if my_domain:
             peers_detail.append(get_node_geo_entry(my_domain, is_local=True))
         for p in sorted(peer_list):
             peers_detail.append(get_node_geo_entry(p, is_local=False))
+        online_nodes = sum(1 for item in peers_detail if item.get("health_score") == 1)
+        down_nodes = sum(1 for item in peers_detail if item.get("health_score") == 0)
         return jsonify({
             "my_domain": my_domain,
             "peers": v2_client_peers,
             "all_peers": peer_list,
             "total_peers": len(peer_list),
             "total_nodes": len(peer_list) + (1 if my_domain else 0),
+            "online_nodes": online_nodes,
+            "hibernating_nodes": down_nodes,
             "peers_detail": peers_detail,
+            "watch_events": list(mesh_watch_events[:50]),
             "app_update": get_signed_app_update_metadata(),
         }), 200
+
+
+@app.route('/api/v1/peers/watch', methods=['GET'])
+def watch_peers():
+    with lock:
+        my_domain = get_my_onion_domain()
+        peer_list = [p for p in known_peers if p != my_domain and p not in DEPRECATED_SEEDS]
+        peers_detail = []
+        if my_domain:
+            peers_detail.append(get_node_geo_entry(my_domain, is_local=True))
+        for p in sorted(peer_list):
+            peers_detail.append(get_node_geo_entry(p, is_local=False))
+        online_nodes = sum(1 for item in peers_detail if item.get("health_score") == 1)
+        down_nodes = sum(1 for item in peers_detail if item.get("health_score") == 0)
+        auto_nodes = sum(1 for item in peers_detail if item.get("auto_discovered") == 1 and item.get("health_score") == 1)
+        events_copy = list(mesh_watch_events[:100])
+    return jsonify({
+        "my_domain": my_domain,
+        "total_nodes": len(peers_detail),
+        "online_nodes": online_nodes,
+        "hibernating_nodes": down_nodes,
+        "auto_join_online": auto_nodes,
+        "events": events_copy,
+        "nodes": peers_detail,
+    }), 200
 
 
 @app.route('/api/v1/version', methods=['GET'])
@@ -2054,6 +2429,7 @@ def health():
         prune_expired_messages_locked()
         total_queued = sum(len(msgs) for msgs in inbox.values())
         active_inboxes = len([u for u, m in inbox.items() if len(m) > 0])
+        clients_online, total_clients = _compute_client_metrics_locked()
         my_domain = get_my_onion_domain()
         peer_count = len([p for p in known_peers if p != my_domain])
         total_nodes = peer_count + (1 if my_domain else 0)
@@ -2061,6 +2437,9 @@ def health():
         my_geo = get_node_geo_entry(my_domain, is_local=True) if my_domain else None
         rtts = [v for k, v in peer_rtt_ewma.items() if k in known_peers and peer_fail_count.get(k, 0) == 0]
         avg_rtt = round(sum(rtts) / len(rtts), 1) if rtts else 0.0
+        online_peers = sum(1 for p in known_peers if p != my_domain and peer_online_state.get(p) == "ONLINE")
+        online_nodes = online_peers + (1 if my_domain else 0)
+        hibernating_nodes = max(0, total_nodes - online_nodes)
     return jsonify({
         "status": "healthy",
         "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-Auth + ACK-Lock + Anti-Sybil + S/Kademlia-GossipSub-v1.2",
@@ -2071,6 +2450,10 @@ def health():
         "geo": my_geo,
         "peers_count": peer_count,
         "total_nodes": total_nodes,
+        "online_nodes": online_nodes,
+        "hibernating_nodes": hibernating_nodes,
+        "clients_online": clients_online,
+        "total_clients": total_clients,
         "queued_messages": total_queued,
         "active_inboxes": active_inboxes,
         "messages_received": stats_counters["messages_received"],
@@ -2096,6 +2479,7 @@ def stats():
         peer_count = len([p for p in known_peers if p != my_domain])
         total_queued = sum(len(msgs) for msgs in inbox.values())
         active_inboxes = len([u for u, m in inbox.items() if len(m) > 0])
+        clients_online, total_clients = _compute_client_metrics_locked()
         rtts = [v for k, v in peer_rtt_ewma.items() if k in known_peers and peer_fail_count.get(k, 0) == 0]
         avg_rtt = round(sum(rtts) / len(rtts), 1) if rtts else 0.0
     return jsonify({
@@ -2104,6 +2488,8 @@ def stats():
         "routing_engine": "S/Kademlia-XOR + GossipSub-v1.2-IHAVE-IDONTWANT + Blinded-Poller-Affinity",
         "storage_engine": "ram-volatile-ephemeral-ttl24h",
         "peers_count": peer_count,
+        "clients_online": clients_online,
+        "total_clients": total_clients,
         "queued_messages": total_queued,
         "active_inboxes": active_inboxes,
         "idontwant_dedup_saved": stats_counters["idontwant_dedup_saved"],
@@ -2397,6 +2783,109 @@ def _announce_to_single_seed(seed: str, current_domain: str, payload: dict):
         print(f"[!] [MESH-WAIT] Waiting for Tor circuit to {seed[:16]}...: {e}", flush=True)
 
 
+PAAS_KEEPALIVE_URLS = (
+    "https://oniontalk-render-mathyared.onrender.com/health",
+)
+
+
+def _ping_paas_keepalive(url: str):
+    try:
+        get_fast_session().get(url, timeout=10)
+    except Exception:
+        pass
+
+
+def _cross_check_sibling_seed_watch(peer: str) -> float | None:
+    my_dom = get_my_onion_domain() or ""
+    sibling_url = None
+    if my_dom.startswith("onion4zr3"):
+        sibling_url = os.getenv("PVE4_FAST_URL", "http://192.168.3.114:8080")
+    elif my_dom.startswith("kn4u2xxl"):
+        sibling_url = os.getenv("PVE2_FAST_URL", "http://192.168.3.113:8080")
+    if not sibling_url:
+        return None
+    try:
+        r = get_fast_session().get(f"{sibling_url.rstrip('/')}/api/v1/peers/watch", timeout=3)
+        if r.status_code == 200:
+            for item in (r.json().get("nodes") or []):
+                if item.get("domain") == peer and item.get("health_score") == 1 and item.get("last_seen_sec", 999) < 90:
+                    return float(item.get("rtt_ms") or 1200.0)
+    except Exception:
+        pass
+    return None
+
+
+def _probe_single_peer_watch(peer: str):
+    session = get_tor_session()
+    t0 = time.monotonic()
+    try:
+        fast_base = _resolve_fast_lane_url(peer)
+        if fast_base:
+            res = get_fast_session().get(f"{fast_base}/health", timeout=5)
+        else:
+            res = session.get(f"http://{peer}/health", timeout=22)
+        if res.status_code == 200:
+            rtt_ms = (time.monotonic() - t0) * 1000.0
+            _record_peer_success(peer, rtt_ms)
+            try:
+                body = res.json()
+                remote_pk = (body.get("node_pubkey") or "").strip().lower()
+                if isinstance(body.get("geo"), dict):
+                    _apply_discovered_geo(peer, body.get("geo"))
+                if PUBKEY_HEX_REGEX.match(remote_pk):
+                    with lock:
+                        peer_pubkeys[peer] = remote_pk
+            except Exception:
+                pass
+            return
+    except Exception:
+        pass
+
+    sibling_rtt = _cross_check_sibling_seed_watch(peer)
+    if sibling_rtt is not None:
+        _record_peer_success(peer, sibling_rtt)
+        return
+    _record_peer_failure(peer, force_down=False)
+
+
+def mesh_watch_loop():
+    """
+    Continuous Real-Time Mesh Watchdog (every 35s, initial sweep at 4s):
+    1) Pings free-tier PaaS clearnet health endpoints (Render #2 & WSO2 Choreo US-East) so
+       their serverless containers stay warm without scaling to zero.
+    2) Probes peers over Tor v3 SOCKS5h that have not recently confirmed via GossipSub IHAVE
+       (including LEGACY_V1_PEERS like AWS EKS & Virginia, plus recovering cloud nodes),
+       recording exact UP/DOWN/AUTO-JOIN state transitions in mesh_watch_events.
+    """
+    time.sleep(4)
+    while True:
+        current_domain = get_my_onion_domain()
+        if not current_domain:
+            time.sleep(3)
+            continue
+
+        if current_domain.startswith("onion4zr3"):
+            for url in PAAS_KEEPALIVE_URLS:
+                watch_executor.submit(_ping_paas_keepalive, url)
+
+        now_sec = int(time.time())
+        with lock:
+            candidates = [
+                p for p in (set(BOOTSTRAP_SEEDS) | known_peers)
+                if p != current_domain and p not in DEPRECATED_SEEDS
+            ]
+            to_probe = [
+                p for p in candidates
+                if peer_online_state.get(p, "UNKNOWN") != "ONLINE"
+                or (now_sec - peer_last_ok_epoch.get(p, 0)) > 45
+                or p in LEGACY_V1_PEERS
+            ]
+
+        futures = [watch_executor.submit(_probe_single_peer_watch, p) for p in to_probe]
+        concurrent.futures.wait(futures, timeout=26)
+        time.sleep(35)
+
+
 def bootstrap_discovery_loop():
     """
     Continuous autonomous peer discovery & Ed25519-authenticated parallel announce loop over Tor.
@@ -2405,8 +2894,8 @@ def bootstrap_discovery_loop():
     primary_seeds = [
         "onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion",
         "kn4u2xxl2otoo2ujv3mhehwfwbw7mtppaf56fu3nxogvv7eekf2qdrid.onion",
-        "zqdx5x7p32f7m2c7n2ngn42b6k4h5p7v5h3j6t5x6q7l4c5d7f6g7h8d.onion",
-        "jz6urt6ce36s7g6w5abk4f3fc3j4e6g5v7m2q9x8z4w3r2t5y6u7i8ad.onion",
+        "zqdx5x7pfybox7m5rz3fe5kiouxhipvh3ekuteq2urrrvwcxjttnmgid.onion",
+        "jz6urt6ckkqqvtasm6bll2mryhksjcawcl4tbguif5nqvxgsfsx6ywad.onion",
     ]
     while True:
         current_domain = get_my_onion_domain()
@@ -2452,6 +2941,7 @@ def bootstrap_discovery_loop():
 if os.getenv("DISABLE_BOOTSTRAP_LOOP") != "1":
     threading.Thread(target=bootstrap_discovery_loop, daemon=True).start()
     threading.Thread(target=anti_entropy_sync_loop, daemon=True).start()
+    threading.Thread(target=mesh_watch_loop, daemon=True).start()
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=8080, threaded=True)

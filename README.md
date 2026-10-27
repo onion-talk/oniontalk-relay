@@ -167,11 +167,11 @@ curl http://127.0.0.1:8080/api/v1/peers/list
 
 ```text
 oniontalk-relay/
-├── docker-compose.yml   # Orchestrates Tor v3 Hidden Service + Gunicorn Relay API (127.0.0.1 bind)
-├── Dockerfile           # Pinned Python 3.12-slim-bookworm + Gunicorn container image
+├── docker-compose.yml   # Single-container All-in-One Relay (Embedded Tor 0.4.9.14 + Gunicorn API)
+├── Dockerfile           # Official Debian Bookworm + Tor Project 0.4.9.14 + Gunicorn container image
+├── entrypoint.sh        # Initializes /data/hidden_service (0700), starts Tor v3 daemon & watchdog
 ├── relay.py             # Zero-knowledge RAM routing engine, Ed25519 auth, PEX gossip & ACK lock
 ├── requirements.txt     # Pinned dependencies (Flask, Gunicorn, Requests[socks], Cryptography)
-├── torrc                # Tor v3 HiddenServiceVersion 3 + SOCKS5h configuration
 └── README.md            # Deployment and operations guide
 ```
 
@@ -185,7 +185,7 @@ To change the localhost HTTP inspection port (default `127.0.0.1:8080`) without 
 RELAY_PORT=8090 docker compose up -d
 ```
 
-> **Important**: Your node's Ed25519 `.onion` private key is persisted in the `tor_keys` Docker volume. Avoid running `docker compose down -v` unless you intentionally want to rotate your `.onion` address.
+> **Important**: Your node's Ed25519 `.onion` private key is persisted in the `oniontalk_data` Docker volume (`/data/hidden_service`). Avoid running `docker compose down -v` unless you intentionally want to rotate your `.onion` address.
 
 ---
 

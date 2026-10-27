@@ -16,11 +16,11 @@ Este pacote contém tudo o que você precisa para rodar um **Nó Federado do Oni
 
 ```text
 server/
-├── docker-compose.yml   # Orquestração dos containers (Tor Hidden Service + Relay API)
-├── Dockerfile           # Imagem leve Python 3.11 + Gunicorn do Relay
+├── docker-compose.yml   # Container único All-in-One (Tor 0.4.9.14 oficial embutido + Relay API)
+├── Dockerfile           # Imagem Debian Bookworm + Tor Project 0.4.9.14 + Gunicorn
+├── entrypoint.sh        # Inicializa /data/hidden_service (0700), sobe o daemon Tor v3 e watchdog
 ├── relay.py             # Motor de roteamento, fila em RAM e Gossip Mesh
 ├── requirements.txt     # Dependências mínimas (Flask, Requests+SOCKS, Gunicorn)
-├── torrc                # Configuração do serviço oculto Tor v3 e proxy SOCKS5
 └── README.md            # Este guia de instalação e operação
 ```
 
@@ -61,8 +61,8 @@ docker compose up -d --build
 ```
 
 ### O que acontece automaticamente nos primeiros 30 a 60 segundos:
-1. O container **`oniontalk-tor`** inicia o daemon Tor e gera o par de chaves criptográficas Ed25519 do seu novo endereço `.onion` v3 (salvo no volume persistente `tor_keys`).
-2. O container **`oniontalk-relay`** sobe a API de mensagens na porta `8080`.
+1. O container único **`oniontalk-relay`** inicia o daemon Tor oficial embutido (`0.4.9.14`) com permissões `0700` automáticas e gera o par de chaves criptográficas Ed25519 do seu novo endereço `.onion` v3 (salvo no volume persistente `oniontalk_data`).
+2. O mesmo container sobe a API de mensagens na porta `8080` e mantém um *watchdog* interno supervisionando o processo Tor.
 3. O loop de *Auto-Discovery* lê o seu novo endereço `.onion` e faz o *handshake* automático com os nós sementes da malha (`BOOTSTRAP_SEEDS`), integrando seu servidor à federação global do OnionTalk.
 
 ---
@@ -140,9 +140,9 @@ $env:RELAY_PORT="8090"; docker compose up -d
 
 ## 💾 Backup da Identidade `.onion` do seu Servidor
 
-A chave privada do endereço `.onion` do seu servidor fica salva automaticamente no volume Docker chamado `tor_keys`.
+A chave privada do endereço `.onion` do seu servidor fica salva automaticamente no volume Docker chamado `oniontalk_data` (`/data/hidden_service`).
 * Se você reiniciar o computador ou rodar `docker compose restart`, **o seu endereço `.onion` continua o mesmo**.
-* **Atenção**: Evite rodar `docker compose down -v` (com a flag `-v`), pois isso apaga o volume `tor_keys` e fará o Tor gerar um novo endereço `.onion` na próxima subida.
+* **Atenção**: Evite rodar `docker compose down -v` (com a flag `-v`), pois isso apaga o volume `oniontalk_data` e fará o Tor gerar um novo endereço `.onion` na próxima subida.
 
 ---
 

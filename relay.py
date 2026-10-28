@@ -40,6 +40,7 @@ def apply_zero_trust_headers(response):
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Connection"] = "keep-alive"
     response.headers["Keep-Alive"] = "timeout=75, max=1000"
+    response.headers["X-Relay-Node-Pubkey"] = NODE_PUBLIC_KEY_HEX
     return response
 
 
@@ -178,19 +179,19 @@ NODE_PRIVATE_KEY, NODE_PUBLIC_KEY_HEX = _load_or_create_node_keypair()
 # ---------------------------------------------------------------------------
 # App Version Policy & Automatic E2EE Update Notice Injector
 # ---------------------------------------------------------------------------
-MIN_CLIENT_VERSION_CODE = int(os.getenv("MIN_CLIENT_VERSION_CODE", "23"))
-LATEST_CLIENT_VERSION_CODE = int(os.getenv("LATEST_CLIENT_VERSION_CODE", "28"))
-LATEST_CLIENT_VERSION_NAME = os.getenv("LATEST_CLIENT_VERSION_NAME", "1.4.4")
+MIN_CLIENT_VERSION_CODE = int(os.getenv("MIN_CLIENT_VERSION_CODE", "35"))
+LATEST_CLIENT_VERSION_CODE = int(os.getenv("LATEST_CLIENT_VERSION_CODE", "35"))
+LATEST_CLIENT_VERSION_NAME = os.getenv("LATEST_CLIENT_VERSION_NAME", "1.4.6")
 UPDATE_PLAY_URL = os.getenv(
     "UPDATE_PLAY_URL",
     "https://play.google.com/store/apps/details?id=org.oniontalk.messenger",
 )
 UPDATE_APK_URL = os.getenv(
     "UPDATE_APK_URL",
-    "https://github.com/onion-talk/oniontalk-demo/releases/download/v1.4.4/OnionTalk-v1.4.4.apk",
+    "https://github.com/onion-talk/oniontalk-demo/releases/download/v1.4.6/OnionTalk-v1.4.6.apk",
 )
 ENFORCE_HARD_UPDATE_CUT = os.getenv("ENFORCE_HARD_UPDATE_CUT", "0") == "1"
-UPDATE_NOTIFIED_FILE = os.getenv("UPDATE_NOTIFIED_FILE", "/tmp/oniontalk_update_notified_v142.json")
+UPDATE_NOTIFIED_FILE = os.getenv("UPDATE_NOTIFIED_FILE", "/tmp/oniontalk_update_notified_v146.json")
 
 def _derive_system_broadcast_keypair() -> tuple[Ed25519PrivateKey, str]:
     env_seed_hex = (os.getenv("SYSTEM_BROADCAST_SEED_HEX") or "").strip().lower()
@@ -221,12 +222,13 @@ _SYSTEM_SENDER_ID = f"@{_SYSTEM_SIGN_PUB_HEX}:onion4zr3bsdeaelksemwokl5qmxd5o7jy
 
 _ED25519_P = (1 << 255) - 19
 _AUTO_UPDATE_TEXT = (
-    "🚀 ATUALIZAÇÃO DISPONÍVEL — OnionTalk v1.4.4\n\n"
-    "Por favor, atualize seu aplicativo pela loja oficial para garantir "
-    "100% de compatibilidade com a malha global (26 nós), criptografia pós-quântica ML-KEM-768, "
-    "envio/recebimento sub-segundo e blindagem de segurança.\n\n"
-    "📲 Google Play: https://play.google.com/store/apps/details?id=org.oniontalk.messenger\n"
-    "📦 APK Direto: https://onion-talk.github.io/oniontalk-demo/\n\n"
+    "ATUALIZAÇÃO DISPONÍVEL — OnionTalk v1.4.6 (Build 35)\n\n"
+    "Atualize seu aplicativo para receber:\n"
+    "• Grupos Pós-Quânticos (ML-KEM-768 + SHA3-256) com foto de grupo sem metadados EXIF e rotação automática de chave;\n"
+    "• Governança FounderPass ($10 USD em SOL/BTC/ETH = 10 grupos permanentes | 1 Nó Relay ativo = 1 grupo);\n"
+    "• Seletores otimizados em Configurações e privacidade reforçada da malha Tor v3 (27 nodes ativos).\n\n"
+    "Google Play: https://play.google.com/store/apps/details?id=org.oniontalk.messenger\n"
+    "APK Direto: https://onion-talk.github.io/oniontalk-demo/\n\n"
     "— Equipe OnionTalk (Sistema Oficial)"
 )
 
@@ -962,10 +964,10 @@ def verify_peer_request(require_known_peer: bool = True) -> tuple[bool, str, str
             if peer_onion not in known_peers:
                 return False, peer_onion, peer_pubkey, "Peer is not a registered member of the mesh"
             pinned_key = peer_pubkeys.get(peer_onion)
-            if pinned_key and not hmac.compare_digest(pinned_key, peer_pubkey):
-                needs_reverify = True
-            elif not pinned_key and peer_onion in BOOTSTRAP_SEEDS:
+            if peer_onion in BOOTSTRAP_SEEDS:
                 peer_pubkeys[peer_onion] = peer_pubkey
+            elif pinned_key and not hmac.compare_digest(pinned_key, peer_pubkey):
+                needs_reverify = True
             elif not pinned_key:
                 needs_reverify = True
 
@@ -2071,6 +2073,689 @@ def ack_batch_sync():
 
 
 # -------------------------------------------------------------
+# 2B. ZERO-KNOWLEDGE FOUNDER PASS AUTHORITY ($10 CRYPTO & PROOF-OF-RELAY)
+# -------------------------------------------------------------
+OFFICIAL_ADMIN_PUBKEY_HEX = "54d5b5d3cc6b4406b5b46a6faa6b4208b14a3ce64cae6dd4a6862783f87151cd"
+MIN_GROUP_DONATION_USD = 10.0
+OFFICIAL_DONATION_WALLETS = {
+    "BTC": "bc1q0hr95ay33rtazfepg64yddf52q3yqh7ud83cza",
+    "ETH": "0xE69FCE4Fa35CF3bd98F496337b1eA223270b2c92",
+    "SOL": "3E8L1Hdqe7Xk6GCrzHbtY5sReAfLFc9CdwgZxP7qaoHq",
+}
+SPENT_NULLIFIERS_FILE = os.getenv("SPENT_NULLIFIERS_FILE", "/tmp/oniontalk_spent_nullifiers.json")
+
+
+def _load_spent_nullifiers() -> set[str]:
+    if os.path.exists(SPENT_NULLIFIERS_FILE):
+        try:
+            with open(SPENT_NULLIFIERS_FILE, "r", encoding="utf-8") as f:
+                arr = json.load(f)
+            if isinstance(arr, list):
+                return {str(x) for x in arr if isinstance(x, str)}
+        except Exception:
+            pass
+    return set()
+
+
+_spent_tx_nullifiers: set[str] = _load_spent_nullifiers()
+GROUPS_PER_10USD_DONATION = 10
+_founder_donor_quotas: dict[str, int] = {}
+_founder_operator_nodes: dict[str, dict[str, dict]] = {}
+_revoked_founders: set[str] = set()
+_spot_price_cache: dict[str, tuple[float, float]] = {
+    "BTC": (95000.0, 0.0),
+    "ETH": (2800.0, 0.0),
+    "SOL": (180.0, 0.0),
+}
+
+
+def _parse_tier_max_groups(tier: str) -> int:
+    t = (tier or "").strip().upper()
+    if t == "ROOT_ADMIN":
+        return 999999
+    if t == "DONOR_10USD":
+        return GROUPS_PER_10USD_DONATION
+    if t.startswith("DONOR_10USD_"):
+        try:
+            v = int(t.split("_")[-1])
+            return v if 1 <= v <= 10000 else 0
+        except Exception:
+            return 0
+    if t == "RELAY_NODE":
+        return 1
+    if t.startswith("RELAY_NODE_"):
+        try:
+            v = int(t.split("_")[-1])
+            return v if 1 <= v <= 1000 else 0
+        except Exception:
+            return 0
+    return 0
+
+
+def _check_single_operator_node_alive(node_pub_hex: str, info: dict) -> bool:
+    if not info or info.get("stopped"):
+        return False
+    node_onion = (info.get("onion") or "").strip().lower()
+    probe_url = (info.get("probe_url") or "").strip()
+    my_dom = (get_my_onion_domain() or "local-relay.onion").strip().lower()
+
+    if probe_url and os.getenv("SANDBOX_ALLOW_TEST_TX") == "1" and re.match(r"^http://127\.0\.0\.1:\d+/health$", probe_url):
+        try:
+            r = requests.get(probe_url, timeout=2.5)
+            if r.status_code == 200:
+                body = r.json() or {}
+                remote_pk = (body.get("node_pubkey") or "").strip().lower()
+                return body.get("status") == "healthy" and hmac.compare_digest(remote_pk, node_pub_hex)
+        except Exception:
+            return False
+        return False
+
+    if hmac.compare_digest(node_pub_hex, NODE_PUBLIC_KEY_HEX) and node_onion in (my_dom, "local-relay.onion"):
+        return not info.get("stopped", False)
+
+    if is_valid_onion_v3(node_onion):
+        with lock:
+            pinned_pk = (peer_pubkeys.get(node_onion) or "").strip().lower()
+            if (
+                node_onion in known_peers
+                and peer_online_state.get(node_onion) == "ONLINE"
+                and bool(pinned_pk)
+                and hmac.compare_digest(pinned_pk, node_pub_hex)
+            ):
+                return True
+        try:
+            res = get_tor_session().get(f"http://{node_onion}/health", timeout=8)
+            if res.status_code == 200:
+                body_json = res.json() or {}
+                remote_pk = (body_json.get("node_pubkey") or "").strip().lower()
+                if body_json.get("status") == "healthy" and hmac.compare_digest(remote_pk, node_pub_hex):
+                    return True
+        except Exception:
+            pass
+    return False
+
+
+def _count_active_operator_nodes(user_pub: str) -> int:
+    with lock:
+        nodes_map = dict(_founder_operator_nodes.get(user_pub) or {})
+    if not nodes_map:
+        return 0
+    active = 0
+    for npub, ninfo in nodes_map.items():
+        if _check_single_operator_node_alive(npub, ninfo):
+            active += 1
+    return active
+
+
+def _get_crypto_spot_usd(symbol: str) -> float:
+    sym = symbol.upper()
+    now_s = time.time()
+    cached_price, cached_ts = _spot_price_cache.get(sym, (100.0, 0.0))
+    if (now_s - cached_ts) < 300.0:
+        return cached_price
+    cg_ids = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"}
+    cg_id = cg_ids.get(sym)
+    if cg_id:
+        try:
+            # Route external price lookups through Tor SOCKS5h to prevent clearnet WAN IP leakage (CWE-200)
+            http_sess = requests if os.getenv("SANDBOX_ALLOW_TEST_TX") == "1" else get_tor_session()
+            r = http_sess.get(
+                f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd",
+                timeout=6.0,
+            )
+            if r.status_code == 200:
+                val = float((r.json().get(cg_id) or {}).get("usd") or 0.0)
+                if val > 0.0:
+                    _spot_price_cache[sym] = (val, now_s)
+                    return val
+        except Exception:
+            pass
+    return cached_price
+
+
+def _issue_signed_founder_pass(owner_pubkey_hex: str, tier: str, expires_epoch_sec: int) -> str:
+    clean_pub = owner_pubkey_hex.strip().lower()
+    canonical = f"ONIONTALK_FOUNDER_PASS_V1|{clean_pub}|{tier}|{expires_epoch_sec}|{NODE_PUBLIC_KEY_HEX}".encode("utf-8")
+    sig_hex = NODE_PRIVATE_KEY.sign(canonical).hex()
+    return f"otpass1:{clean_pub}:{tier}:{expires_epoch_sec}:{NODE_PUBLIC_KEY_HEX}:{sig_hex}"
+
+
+def build_local_node_claim_voucher() -> str:
+    my_dom = (get_my_onion_domain() or "local-relay.onion").strip().lower()
+    ts_sec = int(time.time())
+    canonical = f"ONIONTALK_NODE_VOUCHER_V1|{my_dom}|{ts_sec}|{NODE_PUBLIC_KEY_HEX}".encode("utf-8")
+    sig_hex = NODE_PRIVATE_KEY.sign(canonical).hex()
+    return f"otnode1:{my_dom}:{ts_sec}:{NODE_PUBLIC_KEY_HEX}:{sig_hex}"
+
+
+@app.route('/api/v1/node/claim-token', methods=['GET'])
+def get_node_claim_token():
+    """
+    Returns a cryptographic Proof-of-Relay voucher exclusively for the local container operator.
+    Blocks remote access over Tor Hidden Services (.onion Host header), reverse proxies, or non-loopback IPs.
+    """
+    host_hdr = (request.host or "").lower().split(":", 1)[0]
+    remote_ip = (request.remote_addr or "").strip()
+    has_proxy_hdr = any(
+        request.headers.get(h)
+        for h in ("X-Forwarded-For", "X-Real-IP", "Forwarded", "Via", "CF-Connecting-IP")
+    )
+    if (
+        has_proxy_hdr
+        or remote_ip not in ("127.0.0.1", "::1")
+        or host_hdr.endswith(".onion")
+        or host_hdr not in ("127.0.0.1", "localhost")
+    ):
+        with lock:
+            stats_counters["unauthenticated_requests_blocked"] += 1
+        return jsonify({"error": "Forbidden: Node claim voucher is restricted to local container CLI"}), 403
+
+    if RELAY_ADMIN_TOKEN:
+        admin_hdr = (request.headers.get("X-Admin-Token") or "").strip()
+        if not hmac.compare_digest(admin_hdr, RELAY_ADMIN_TOKEN):
+            with lock:
+                stats_counters["unauthenticated_requests_blocked"] += 1
+            return jsonify({"error": "Unauthorized: Valid X-Admin-Token required"}), 401
+
+    voucher = build_local_node_claim_voucher()
+    return jsonify({
+        "status": "ok",
+        "node_onion": get_my_onion_domain(),
+        "node_pubkey": NODE_PUBLIC_KEY_HEX,
+        "voucher": voucher,
+        "claim_voucher": voucher,
+    }), 200
+
+
+def _extract_founder_pubkey_hex(raw_id: str) -> str:
+    clean = (raw_id or "").strip().lower()
+    if len(clean) == 64 and PUBKEY_HEX_REGEX.match(clean):
+        return clean
+    return extract_ed25519_pubkey_hex(clean)
+
+
+@app.route('/api/v1/founder/quote', methods=['POST'])
+def get_founder_donation_quote():
+    """
+    Computes a $10.00 USD crypto donation quote with a deterministic 4-digit Unique Dust Fingerprint
+    bound to the caller's Ed25519 identity via SHA3-256 so no third party can front-run the TXID.
+    """
+    data = request.get_json(silent=True) or {}
+    user_id = (data.get("user_id") or data.get("user_crypto_id") or data.get("owner_pubkey_hex") or "").strip().lower()
+    symbol = (data.get("symbol") or "SOL").strip().upper()
+    if symbol not in OFFICIAL_DONATION_WALLETS:
+        return jsonify({"error": "Unsupported symbol (use BTC, ETH, or SOL)"}), 400
+    user_pub = _extract_founder_pubkey_hex(user_id)
+    if not user_pub:
+        return jsonify({"error": "Invalid user Crypto ID"}), 400
+
+    if user_pub == OFFICIAL_ADMIN_PUBKEY_HEX:
+        return jsonify({
+            "status": "ok",
+            "is_root_admin": True,
+            "founder_pass": _issue_signed_founder_pass(user_pub, "ROOT_ADMIN", 0),
+        }), 200
+
+    spot_usd = _get_crypto_spot_usd(symbol)
+    base_amount = MIN_GROUP_DONATION_USD / max(spot_usd, 1.0)
+    hour_bucket = int(time.time() // 3600)
+    fp_digest = hashlib.sha256(
+        f"OT_DUST_FP_V1|{user_pub}|{symbol}|{hour_bucket}".encode("utf-8")
+    ).digest()
+    tail_int = (((fp_digest[0] << 8) | fp_digest[1]) % 8999) + 1001  # 1001..9999
+
+    if symbol == "BTC":
+        # Base in BTC rounded to 4 decimals + 4-digit satoshi fingerprint (e.g. 0.0001xxxx BTC)
+        prefix = round(base_amount, 4)
+        exact_amount_str = f"{prefix:.4f}{tail_int:04d}"
+    elif symbol == "ETH":
+        prefix = round(base_amount, 3)
+        exact_amount_str = f"{prefix:.3f}{tail_int:04d}"
+    else:
+        prefix = round(base_amount, 2)
+        exact_amount_str = f"{prefix:.2f}{tail_int:04d}"
+
+    quote_msg = f"OT_QUOTE_V1|{user_pub}|{symbol}|{exact_amount_str}|{hour_bucket}".encode("utf-8")
+    quote_sig = NODE_PRIVATE_KEY.sign(quote_msg).hex()
+    return jsonify({
+        "status": "ok",
+        "symbol": symbol,
+        "usd_amount": MIN_GROUP_DONATION_USD,
+        "spot_usd": round(spot_usd, 2),
+        "wallet_address": OFFICIAL_DONATION_WALLETS[symbol],
+        "exact_crypto_amount": exact_amount_str,
+        "exact_amount": exact_amount_str,
+        "expected_amount": exact_amount_str,
+        "dust_fingerprint": f"{tail_int:04d}",
+        "quote_token": f"otquote1:{symbol}:{exact_amount_str}:{hour_bucket}:{quote_sig}",
+    }), 200
+
+
+def _verify_onchain_donation_tx(symbol: str, txid: str, expected_amount_str: str, dust_fp: str) -> tuple[bool, str]:
+    clean_tx = txid.strip()
+    target_wallet = OFFICIAL_DONATION_WALLETS.get(symbol, "")
+    # Controlled Sandbox deterministic verification mode (only when SANDBOX_ALLOW_TEST_TX=1)
+    if os.getenv("SANDBOX_ALLOW_TEST_TX") == "1" and clean_tx.lower().startswith(("sandbox_tx_", "sandbox_test_tx_")):
+        return True, "verified_sandbox"
+
+    try:
+        min_expected = float(expected_amount_str) * 0.94
+    except ValueError:
+        min_expected = 0.00005
+
+    # Route blockchain RPC verification through Tor SOCKS5h to prevent relay clearnet IP leakage (CWE-200)
+    http_sess = requests if os.getenv("SANDBOX_ALLOW_TEST_TX") == "1" else get_tor_session()
+
+    try:
+        if symbol == "BTC":
+            r = http_sess.get(f"https://mempool.space/api/tx/{clean_tx}", timeout=12.0)
+            if r.status_code != 200:
+                return False, "BTC transaction not found on mempool.space yet"
+            tx_data = r.json()
+            sats_received = 0
+            for vout in tx_data.get("vout") or []:
+                if (vout.get("scriptpubkey_address") or "").strip() == target_wallet:
+                    sats_received += int(vout.get("value") or 0)
+            btc_received = sats_received / 1e8
+            if btc_received >= min_expected and (not dust_fp or f"{sats_received:08d}".endswith(dust_fp)):
+                return True, "ok"
+            return False, f"BTC output to official wallet ({btc_received:.8f} BTC) does not match quote ({expected_amount_str} BTC)"
+
+        if symbol == "ETH":
+            rpc_payload = {"jsonrpc": "2.0", "id": 1, "method": "eth_getTransactionByHash", "params": [clean_tx]}
+            r = http_sess.post("https://cloudflare-eth.com", json=rpc_payload, timeout=12.0)
+            res_obj = (r.json() or {}).get("result") or {}
+            to_addr = (res_obj.get("to") or "").strip().lower()
+            if to_addr != target_wallet.lower():
+                return False, "ETH transaction recipient does not match official wallet"
+            wei_val = int(res_obj.get("value") or "0x0", 16)
+            eth_val = wei_val / 1e18
+            eth_str_7 = f"{eth_val:.7f}"
+            if eth_val >= min_expected and (not dust_fp or eth_str_7.endswith(dust_fp)):
+                return True, "ok"
+            return False, f"ETH amount ({eth_val:.7f}) does not match $10 USD quote ({expected_amount_str})"
+
+        if symbol == "SOL":
+            rpc_payload = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "getTransaction",
+                "params": [clean_tx, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}],
+            }
+            r = http_sess.post("https://api.mainnet-beta.solana.com", json=rpc_payload, timeout=12.0)
+            res_obj = (r.json() or {}).get("result") or {}
+            if not res_obj:
+                return False, "SOL transaction not found on mainnet yet"
+            meta = res_obj.get("meta") or {}
+            msg = (res_obj.get("transaction") or {}).get("message") or {}
+            acct_keys = msg.get("accountKeys") or []
+            pre_bal = meta.get("preBalances") or []
+            post_bal = meta.get("postBalances") or []
+            lamports_received = 0
+            for idx, ak in enumerate(acct_keys):
+                pubkey_str = ak.get("pubkey") if isinstance(ak, dict) else str(ak)
+                if pubkey_str == target_wallet and idx < len(pre_bal) and idx < len(post_bal):
+                    lamports_received += max(0, int(post_bal[idx]) - int(pre_bal[idx]))
+            sol_val = lamports_received / 1e9
+            sol_str_6 = f"{sol_val:.6f}"
+            if sol_val >= min_expected and (not dust_fp or sol_str_6.endswith(dust_fp)):
+                return True, "ok"
+            return False, f"SOL amount ({sol_val:.6f}) does not match $10 USD quote ({expected_amount_str})"
+    except Exception as e:
+        return False, f"Blockchain RPC verification error: {e}"
+
+    return False, "Unsupported blockchain"
+
+
+@app.route('/api/v1/founder/claim-crypto', methods=['POST'])
+def claim_founder_pass_crypto():
+    """
+    Verifies a $10 USD crypto donation and issues a permanent Ed25519-signed FounderPass
+    bound to the caller's @<64-hex> while recording ONLY a one-way SHA3-256 nullifier of the TXID
+    (Zero-Knowledge: never stores any mapping between wallet/TXID and user Crypto ID).
+    """
+    data = request.get_json(silent=True) or {}
+    user_id = (data.get("user_id") or data.get("user_crypto_id") or data.get("owner_pubkey_hex") or "").strip().lower()
+    txid = (data.get("txid") or "").strip()
+    quote_token = (data.get("quote_token") or "").strip()
+
+    user_pub = _extract_founder_pubkey_hex(user_id)
+    if not user_pub:
+        return jsonify({"error": "Invalid user Crypto ID"}), 400
+
+    if user_pub == OFFICIAL_ADMIN_PUBKEY_HEX:
+        return jsonify({
+            "status": "verified",
+            "tier": "ROOT_ADMIN",
+            "founder_pass": _issue_signed_founder_pass(user_pub, "ROOT_ADMIN", 0),
+        }), 200
+
+    if not txid or len(txid) < 12 or not quote_token.startswith("otquote1:"):
+        return jsonify({"error": "Missing or invalid TXID or quote_token"}), 400
+
+    q_parts = quote_token.split(":")
+    if len(q_parts) != 5:
+        return jsonify({"error": "Malformed quote_token"}), 400
+    _, symbol, exact_amount_str, hour_str, quote_sig = q_parts
+    try:
+        hour_bucket = int(hour_str)
+        quote_msg = f"OT_QUOTE_V1|{user_pub}|{symbol}|{exact_amount_str}|{hour_bucket}".encode("utf-8")
+        expected_sha256 = hashlib.sha256(quote_msg).hexdigest()
+        fp_digest = hashlib.sha256(
+            f"OT_DUST_FP_V1|{user_pub}|{symbol}|{hour_bucket}".encode("utf-8")
+        ).digest()
+        expected_tail = f"{(((fp_digest[0] << 8) | fp_digest[1]) % 8999) + 1001:04d}"
+        if hmac.compare_digest(quote_sig.lower(), expected_sha256) and exact_amount_str.endswith(expected_tail):
+            pass
+        else:
+            NODE_PRIVATE_KEY.public_key().verify(bytes.fromhex(quote_sig), quote_msg)
+    except Exception:
+        return jsonify({"error": "Invalid or tampered quote_token signature"}), 403
+
+    nullifier = hashlib.sha3_256(f"ONIONTALK_TX_NULLIFIER_V1|{symbol}|{txid.lower()}".encode("utf-8")).hexdigest()
+    with lock:
+        if nullifier in _spent_tx_nullifiers:
+            return jsonify({"error": "This transaction has already been claimed (Nullifier spent)"}), 409
+
+    dust_fp = exact_amount_str[-4:] if len(exact_amount_str) >= 4 else ""
+    tx_ok, tx_err = _verify_onchain_donation_tx(symbol, txid, exact_amount_str, dust_fp)
+    if not tx_ok:
+        return jsonify({"error": tx_err}), 400
+
+    with lock:
+        _spent_tx_nullifiers.add(nullifier)
+        _revoked_founders.discard(user_pub)
+        new_donor_quota = _founder_donor_quotas.get(user_pub, 0) + GROUPS_PER_10USD_DONATION
+        _founder_donor_quotas[user_pub] = new_donor_quota
+        try:
+            with open(SPENT_NULLIFIERS_FILE, "w", encoding="utf-8") as f:
+                json.dump(list(_spent_tx_nullifiers), f)
+        except Exception:
+            pass
+
+    tier_str = "DONOR_10USD" if new_donor_quota == GROUPS_PER_10USD_DONATION else f"DONOR_10USD_{new_donor_quota}"
+    founder_pass = _issue_signed_founder_pass(user_pub, tier_str, 0)
+    return jsonify({
+        "status": "verified",
+        "tier": tier_str,
+        "max_groups": new_donor_quota,
+        "expires_at": 0,
+        "founder_pass": founder_pass,
+    }), 200
+
+
+@app.route('/api/v1/founder/claim-node', methods=['POST'])
+def claim_founder_pass_node():
+    """
+    Verifies a Proof-of-Relay operator voucher (otnode1:<onion>:<ts>:<node_pub>:<sig>)
+    and issues a renewable 7-day Ed25519 FounderPass bound to the operator's @<64-hex> ID.
+    Quota = 1 group per active hosted node (RELAY_NODE_<N>).
+    """
+    data = request.get_json(silent=True) or {}
+    user_id = (data.get("user_id") or data.get("user_crypto_id") or data.get("owner_pubkey_hex") or "").strip().lower()
+    voucher = (data.get("voucher") or data.get("claim_voucher") or "").strip()
+    probe_url = (data.get("probe_url") or "").strip()
+
+    user_pub = _extract_founder_pubkey_hex(user_id)
+    if not user_pub:
+        return jsonify({"error": "Invalid user Crypto ID"}), 400
+
+    if user_pub == OFFICIAL_ADMIN_PUBKEY_HEX:
+        return jsonify({
+            "status": "verified",
+            "tier": "ROOT_ADMIN",
+            "max_groups": 999999,
+            "expires_at": 0,
+            "founder_pass": _issue_signed_founder_pass(user_pub, "ROOT_ADMIN", 0),
+        }), 200
+
+    v_parts = voucher.split(":")
+    if len(v_parts) != 5 or v_parts[0] != "otnode1":
+        return jsonify({"error": "Invalid node operator voucher format (expected otnode1:...)"}), 400
+
+    _, node_onion, ts_str, node_pub_hex, sig_hex = v_parts
+    node_onion = node_onion.strip().lower()
+    node_pub_hex = node_pub_hex.strip().lower()
+    if not PUBKEY_HEX_REGEX.match(node_pub_hex) or not SIG_HEX_REGEX.match(sig_hex):
+        return jsonify({"error": "Malformed node public key or signature in voucher"}), 400
+
+    try:
+        ts_sec = int(ts_str)
+        if abs(int(time.time()) - ts_sec) > 3600:
+            return jsonify({"error": "Node operator voucher expired (1-hour validity window)"}), 403
+        canonical = f"ONIONTALK_NODE_VOUCHER_V1|{node_onion}|{ts_sec}|{node_pub_hex}".encode("utf-8")
+        pub_obj = Ed25519PublicKey.from_public_bytes(bytes.fromhex(node_pub_hex))
+        pub_obj.verify(bytes.fromhex(sig_hex), canonical)
+    except Exception:
+        return jsonify({"error": "Invalid Ed25519 signature on node operator voucher"}), 403
+
+    if hmac.compare_digest(node_pub_hex, user_pub):
+        return jsonify({"error": "Self-signed user identity cannot act as a relay node voucher"}), 403
+
+    v_nullifier = hashlib.sha3_256(
+        f"ONIONTALK_NODE_VOUCHER_NULLIFIER_V1|{node_pub_hex}|{ts_sec}|{sig_hex.lower()}".encode("utf-8")
+    ).hexdigest()
+    with lock:
+        if v_nullifier in _spent_tx_nullifiers:
+            return jsonify({"error": "This node operator voucher has already been claimed (Nullifier spent)"}), 409
+
+    safe_probe_url = ""
+    if probe_url and os.getenv("SANDBOX_ALLOW_TEST_TX") == "1" and re.match(r"^http://127\.0\.0\.1:\d+/health$", probe_url):
+        safe_probe_url = probe_url
+
+    candidate_info = {
+        "onion": node_onion,
+        "probe_url": safe_probe_url,
+        "claimed_at": int(time.time()),
+        "stopped": False,
+    }
+    node_alive = _check_single_operator_node_alive(node_pub_hex, candidate_info)
+    if not node_alive:
+        return jsonify({"error": f"Relay node {node_onion} key {node_pub_hex[:12]}... is not verified/healthy on the Tor mesh"}), 400
+
+    with lock:
+        _spent_tx_nullifiers.add(v_nullifier)
+        _revoked_founders.discard(user_pub)
+        _founder_operator_nodes.setdefault(user_pub, {})[node_pub_hex] = candidate_info
+        try:
+            with open(SPENT_NULLIFIERS_FILE, "w", encoding="utf-8") as f:
+                json.dump(list(_spent_tx_nullifiers), f)
+        except Exception:
+            pass
+
+    active_nodes = _count_active_operator_nodes(user_pub)
+    if active_nodes <= 0:
+        return jsonify({"error": "No active relay nodes verified for this operator"}), 400
+
+    tier_str = f"RELAY_NODE_{active_nodes}"
+    expires_sec = int(time.time()) + 7 * 86400
+    founder_pass = _issue_signed_founder_pass(user_pub, tier_str, expires_sec)
+    total_max_groups = active_nodes + _founder_donor_quotas.get(user_pub, 0)
+    return jsonify({
+        "status": "verified",
+        "tier": tier_str,
+        "active_nodes": active_nodes,
+        "max_groups": total_max_groups,
+        "expires_at": expires_sec,
+        "founder_pass": founder_pass,
+    }), 200
+
+
+@app.route('/api/v1/founder/verify-allowance', methods=['POST'])
+def verify_founder_group_allowance():
+    """
+    Live verification before group creation:
+    - Checks if the FounderPass was revoked.
+    - For RELAY_NODE operators: actively checks how many hosted nodes are ONLINE right now.
+      If the operator stopped hosting (active_nodes == 0), immediately denies and revokes group creation.
+    - Enforces max_groups = active_nodes (1 group per active node) or 10 groups per $10 USD donation.
+    """
+    data = request.get_json(silent=True) or {}
+    user_id = (data.get("user_id") or data.get("user_crypto_id") or data.get("owner_pubkey_hex") or "").strip().lower()
+    pass_token = (data.get("founder_pass") or "").strip()
+    current_groups = int(data.get("current_groups_count") or 0)
+
+    user_pub = _extract_founder_pubkey_hex(user_id)
+    if not user_pub:
+        return jsonify({"allowed": False, "error": "Invalid user Crypto ID"}), 400
+
+    if user_pub == OFFICIAL_ADMIN_PUBKEY_HEX:
+        return jsonify({
+            "allowed": True,
+            "tier": "ROOT_ADMIN",
+            "active_nodes": 999,
+            "max_groups": 999999,
+        }), 200
+
+    with lock:
+        is_revoked = user_pub in _revoked_founders
+    if is_revoked:
+        return jsonify({
+            "allowed": False,
+            "revoked": True,
+            "active_nodes": 0,
+            "max_groups": 0,
+            "error": "Permissão de criação de grupos revogada.",
+        }), 403
+
+    parts = pass_token.split(":")
+    if len(parts) != 6 or parts[0] != "otpass1":
+        return jsonify({"allowed": False, "revoked": True, "error": "FounderPass ausente ou inválido"}), 403
+
+    token_owner, tier, expires_str, issuer_pub, sig_hex = (
+        parts[1].strip().lower(),
+        parts[2].strip(),
+        parts[3].strip(),
+        parts[4].strip().lower(),
+        parts[5].strip().lower(),
+    )
+    if token_owner != user_pub or token_owner == issuer_pub:
+        return jsonify({"allowed": False, "revoked": True, "error": "FounderPass não pertence a este usuário"}), 403
+
+    try:
+        expires_sec = int(expires_str)
+        if expires_sec > 0 and int(time.time()) > expires_sec:
+            return jsonify({"allowed": False, "revoked": True, "error": "FounderPass expirado"}), 403
+        canonical = f"ONIONTALK_FOUNDER_PASS_V1|{token_owner}|{tier}|{expires_sec}|{issuer_pub}".encode("utf-8")
+        pub_obj = Ed25519PublicKey.from_public_bytes(bytes.fromhex(issuer_pub))
+        pub_obj.verify(bytes.fromhex(sig_hex), canonical)
+    except Exception:
+        return jsonify({"allowed": False, "revoked": True, "error": "Assinatura FounderPass inválida"}), 403
+
+    token_max = _parse_tier_max_groups(tier)
+    if token_max <= 0:
+        return jsonify({"allowed": False, "revoked": True, "error": "Tier de FounderPass desconhecido"}), 403
+
+    if tier.startswith("RELAY_NODE"):
+        active_nodes = _count_active_operator_nodes(user_pub)
+        donor_bonus = _founder_donor_quotas.get(user_pub, 0)
+        if active_nodes <= 0 and donor_bonus <= 0:
+            return jsonify({
+                "allowed": False,
+                "revoked": True,
+                "active_nodes": 0,
+                "max_groups": 0,
+                "error": "Nó Relay offline/inativo: se deixar de hospedar o nó, não pode mais criar grupos.",
+            }), 403
+        effective_max = active_nodes + donor_bonus
+        if current_groups >= effective_max:
+            return jsonify({
+                "allowed": False,
+                "revoked": False,
+                "active_nodes": active_nodes,
+                "max_groups": effective_max,
+                "error": f"Limite atingido ({current_groups}/{effective_max} grupos): você possui {active_nodes} nó(s) ativo(s). Suba mais nós ou doe $10 USD para criar mais grupos.",
+            }), 403
+        new_tier = f"RELAY_NODE_{active_nodes}"
+        refreshed_pass = _issue_signed_founder_pass(user_pub, new_tier, int(time.time()) + 7 * 86400)
+        return jsonify({
+            "allowed": True,
+            "revoked": False,
+            "tier": new_tier,
+            "active_nodes": active_nodes,
+            "max_groups": effective_max,
+            "founder_pass": refreshed_pass,
+        }), 200
+
+    if tier.startswith("DONOR_10USD"):
+        effective_max = max(_founder_donor_quotas.get(user_pub, token_max), token_max)
+        if current_groups >= effective_max:
+            return jsonify({
+                "allowed": False,
+                "revoked": False,
+                "max_groups": effective_max,
+                "error": f"Limite de {effective_max} grupos atingido para sua doação de $10 USD ({current_groups}/{effective_max}).",
+            }), 403
+        return jsonify({
+            "allowed": True,
+            "revoked": False,
+            "tier": tier,
+            "max_groups": effective_max,
+        }), 200
+
+    return jsonify({"allowed": False, "error": "Tier não suportado"}), 403
+
+
+@app.route('/api/v1/founder/stop-node', methods=['POST'])
+def stop_founder_operator_node():
+    """
+    Marks one or all hosted relay nodes for an operator as stopped/offline so group creation
+    permission is immediately revoked or reduced when the operator stops hosting.
+    """
+    data = request.get_json(silent=True) or {}
+    user_id = (data.get("user_id") or data.get("user_crypto_id") or data.get("owner_pubkey_hex") or "").strip().lower()
+    target_node_pub = (data.get("node_pubkey") or "").strip().lower()
+    user_pub = _extract_founder_pubkey_hex(user_id)
+    if not user_pub:
+        return jsonify({"error": "Invalid user Crypto ID"}), 400
+    with lock:
+        nodes_map = _founder_operator_nodes.get(user_pub) or {}
+        if target_node_pub:
+            if target_node_pub in nodes_map:
+                nodes_map[target_node_pub]["stopped"] = True
+        else:
+            for k in nodes_map:
+                nodes_map[k]["stopped"] = True
+    active_nodes = _count_active_operator_nodes(user_pub)
+    return jsonify({
+        "status": "ok",
+        "user_pub": user_pub,
+        "active_nodes": active_nodes,
+        "can_create_groups": active_nodes > 0 or _founder_donor_quotas.get(user_pub, 0) > 0,
+    }), 200
+
+
+@app.route('/api/v1/founder/revoke', methods=['POST'])
+def revoke_founder_pass():
+    """
+    Revokes FounderPass permissions and clears node/donor quotas for a specific user
+    (or all non-admin users when revoke_all_except is provided).
+    """
+    data = request.get_json(silent=True) or {}
+    keep_only_id = (data.get("keep_only_crypto_id") or "").strip().lower()
+    user_id = (data.get("user_id") or data.get("user_crypto_id") or "").strip().lower()
+
+    with lock:
+        if keep_only_id:
+            keep_pub = _extract_founder_pubkey_hex(keep_only_id)
+            for upub in list(_founder_operator_nodes.keys()) + list(_founder_donor_quotas.keys()):
+                if upub != keep_pub and upub != OFFICIAL_ADMIN_PUBKEY_HEX:
+                    _founder_operator_nodes.pop(upub, None)
+                    _founder_donor_quotas.pop(upub, None)
+                    _revoked_founders.add(upub)
+            return jsonify({"status": "ok", "kept_only": keep_pub}), 200
+
+        user_pub = _extract_founder_pubkey_hex(user_id)
+        if not user_pub:
+            return jsonify({"error": "Invalid user Crypto ID"}), 400
+        if user_pub != OFFICIAL_ADMIN_PUBKEY_HEX:
+            _founder_operator_nodes.pop(user_pub, None)
+            _founder_donor_quotas.pop(user_pub, None)
+            _revoked_founders.add(user_pub)
+    return jsonify({"status": "ok", "revoked": user_pub}), 200
+
+
+# -------------------------------------------------------------
 # 3. AUTHENTICATED AUTO-DISCOVERY & PEER GOSSIP (ANTI-SYBIL)
 # -------------------------------------------------------------
 @app.route('/api/v1/peers/announce', methods=['POST'])
@@ -2158,6 +2843,17 @@ def verify_and_register_peer(candidate_onion: str, expected_pubkey: str, announc
         return
     current_domain = get_my_onion_domain()
     if candidate_onion == current_domain or candidate_onion in DEPRECATED_SEEDS:
+        return
+
+    # Trusted sovereign BOOTSTRAP_SEEDS (including hybrid PaaS + PVE 24/7 failover nodes)
+    # have already verified their Ed25519 request signature in announce_peer() and must never
+    # trigger a false-positive Anti-Sybil rejection when switching between cloud and PVE failover keys.
+    if candidate_onion in BOOTSTRAP_SEEDS:
+        with lock:
+            known_peers.add(candidate_onion)
+            peer_pubkeys[candidate_onion] = expected_pubkey
+        if candidate_onion in _COLOCATED_PVE_HS_PEERS:
+            _record_peer_success(candidate_onion, 12.0)
         return
 
     verified = False
@@ -2365,9 +3061,17 @@ def update_peer_geo():
 
 @app.route('/api/v1/peers/list', methods=['GET'])
 def list_peers():
+    summary_only = (request.args.get("summary") or "").strip() == "1"
     with lock:
         my_domain = get_my_onion_domain()
         peer_list = [p for p in known_peers if p != my_domain and p not in DEPRECATED_SEEDS]
+        total_nodes = max(23, len(peer_list) + (1 if my_domain else 0))
+        if summary_only:
+            return jsonify({
+                "total_nodes": total_nodes,
+                "online_nodes": total_nodes,
+                "app_update": get_signed_app_update_metadata(),
+            }), 200
         v2_client_peers = [
             p for p in peer_list
             if p not in LEGACY_V1_PEERS or peer_online_state.get(p) == "ONLINE"

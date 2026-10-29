@@ -1396,9 +1396,9 @@ def _resolve_fast_lane_url(peer_onion: str) -> str | None:
         return "http://127.0.0.1:8080"
     # Co-located Homelab sibling fast-lane (configured via env only)
     if my_dom.startswith("onion4zr3") and peer_onion.startswith("kn4u2xxl"):
-        return os.getenv("PVE4_FAST_URL", "") or None
+        return os.getenv("SIBLING_NODE2_FAST_URL", "") or None
     if my_dom.startswith("kn4u2xxl") and peer_onion.startswith("onion4zr3"):
-        return os.getenv("PVE2_FAST_URL", "") or None
+        return os.getenv("SIBLING_NODE1_FAST_URL", "") or None
     return None
 
 
@@ -3641,9 +3641,9 @@ def _cross_check_sibling_seed_watch(peer: str) -> float | None:
     my_dom = get_my_onion_domain() or ""
     sibling_url = None
     if my_dom.startswith("onion4zr3"):
-        sibling_url = os.getenv("PVE4_FAST_URL", "")
+        sibling_url = os.getenv("SIBLING_NODE2_FAST_URL", "")
     elif my_dom.startswith("kn4u2xxl"):
-        sibling_url = os.getenv("PVE2_FAST_URL", "")
+        sibling_url = os.getenv("SIBLING_NODE1_FAST_URL", "")
     if not sibling_url:
         return None
     try:

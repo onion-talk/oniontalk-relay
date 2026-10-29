@@ -1,0 +1,13 @@
+services:
+  oniontalk-relay:
+    build: .
+    image: eriktonon/oniontalk:latest
+    container_name: oniontalk-relay
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${RELAY_PORT:-8080}:8080"
+    volumes:
+      - oniontalk_data:/data
+
+volumes:
+  oniontalk_data:

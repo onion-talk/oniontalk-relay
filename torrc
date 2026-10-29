@@ -1,0 +1,4 @@
+HiddenServiceDir /var/lib/tor/hidden_service/
+HiddenServicePort 80 oniontalk-relay:8080
+HiddenServiceVersion 3
+SOCKSPort 0.0.0.0:9050

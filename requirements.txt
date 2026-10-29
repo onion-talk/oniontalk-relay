@@ -1,0 +1,5 @@
+Flask==3.1.0
+gunicorn==23.0.0
+requests[socks]==2.32.3
+PySocks==1.7.1
+cryptography==44.0.1

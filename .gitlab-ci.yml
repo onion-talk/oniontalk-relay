@@ -9,6 +9,7 @@ strix_relay_gate:
   stage: security_test
   image: python:3.12-slim
   script:
+    - python3 scripts/zero_leak_scanner.py
     - python3 -m py_compile relay.py
     - pip install --quiet -r requirements.txt
     - |

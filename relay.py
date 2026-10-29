@@ -409,7 +409,7 @@ NODE_GEO_METADATA = {
     "e3a7jfpzcsj6e7o7lzrwos2qz53wesp62lgjmsa3pld6xwnqvromrvqd.onion": {
         "node_name": "☁️ Nó 3 — Mesh Node #3 (US-East)",
         "map_label": "N3•EKS",
-        "location": "US-East (AWS EKS), EUA",
+        "location": "US-East #1, EUA",
         "provider": "OnionTalk Sovereign Mesh (US-East #1)",
         "lat": 49.0,
         "lon": -74.0,
@@ -425,10 +425,10 @@ NODE_GEO_METADATA = {
         "role": "🟧 Cloud Relay (BR-SP #3)"
     },
     "xememocnagky3qlkkx7n6tgkmjrzhmfzoahbke3gvtea6nu4nnc27sad.onion": {
-        "node_name": "☁️ Nó 5 — AWS Virginia",
+        "node_name": "☁️ Nó 5 — US-East Sovereign #2",
         "map_label": "N5•VA",
         "location": "Ashburn, Virginia, EUA (us-east-1)",
-        "provider": "Amazon Web Services (us-east-1)",
+        "provider": "OnionTalk Sovereign Cloud (US-East #2)",
         "lat": 26.5,
         "lon": -76.0,
         "role": "☁️ Cloud Relay (US-East #2)"
@@ -444,7 +444,7 @@ NODE_GEO_METADATA = {
     },
     "jz6urt6ckkqqvtasm6bll2mryhksjcawcl4tbguif5nqvxgsfsx6ywad.onion": {
         "node_name": "🌐 Nó 7 — Mesh Node #7 (US-East)",
-        "map_label": "N7•GCP",
+        "map_label": "N7•US3",
         "location": "US-East, EUA",
         "provider": "OnionTalk Sovereign Mesh (US-East #3)",
         "lat": 26.5,
@@ -473,7 +473,7 @@ NODE_GEO_METADATA = {
         "node_name": "🐳 Nó 10 — US-East Container Relay",
         "map_label": "N10•B4A1",
         "location": "US-East (US-East Container Mesh #1), EUA",
-        "provider": "US-East Container Mesh (AWS us-east #1)",
+        "provider": "OnionTalk Container Mesh (US-East #5)",
         "lat": 41.5,
         "lon": -98.0,
         "role": "🐳 Cloud Relay (US-East Container Node #1)"
@@ -506,10 +506,10 @@ NODE_GEO_METADATA = {
         "role": "🇫🇷 Cloud Relay (Paris #3, FR)"
     },
     "wfi3nwuzk2tgrsf2scdy4nb6x6rtiocit4n26477zdlvdvshkgip3ayd.onion": {
-        "node_name": "🟦 Nó 13 — US-Central Node / GCP #2 (US-Central)",
+        "node_name": "🟦 Nó 13 — US-Central Sovereign #1",
         "map_label": "N13•NF",
         "location": "Council Bluffs, Iowa, EUA (US-Central)",
-        "provider": "US-Central Node / GCP Cloud Relay",
+        "provider": "OnionTalk Sovereign Cloud (US-Central)",
         "lat": 49.0,
         "lon": -97.0,
         "role": "🟦 Cloud Relay (US-Central)"
@@ -553,8 +553,8 @@ NODE_GEO_METADATA = {
     "2amizuhb3p5x2lk3sra7f7thm5tgs7qtnysgowqpmexcqi4cuwyv7vad.onion": {
         "node_name": "🇨🇳 Nó 17 — AP-East Mesh (China)",
         "map_label": "N17•CN",
-        "location": "Hangzhou, China (CN-East / Alibaba Cloud)",
-        "provider": "AP-East Node Studios (Alibaba Cloud CN)",
+        "location": "Hangzhou, China (CN-East)",
+        "provider": "OnionTalk AP-East Sovereign Mesh (CN)",
         "lat": 29.0,
         "lon": 117.5,
         "role": "🇨🇳 Cloud Relay (Hangzhou, CN)"
@@ -587,49 +587,49 @@ NODE_GEO_METADATA = {
         "role": "🇷🇺 Cloud Relay (Moscou #2, RU)"
     },
     "huf4fjrdr67c3vir6b33s2rsspnmejgtn5azs2jby7yvfqwlsnxeawad.onion": {
-        "node_name": "🟣 Nó 21 — WSO2 Choreo #1 (US-East Azure)",
+        "node_name": "🟣 Nó 21 — US-East Mesh Relay #1",
         "map_label": "N21•CH1",
         "location": "Virginia / US-East #1, EUA (e1-us-east-azure)",
-        "provider": "WSO2 Choreo Cloud (BYOC Docker #1)",
+        "provider": "Sovereign Cloud Container #1",
         "lat": 55.0,
         "lon": -122.0,
-        "role": "🟣 Cloud Relay (Choreo US #1)"
+        "role": "🟣 Cloud Relay (US-East #1)"
     },
     "ktr4uxdwjem2gabgwmivlx2uyyea6kdajpyb4fxxxa7x3zs5lq4fcyad.onion": {
-        "node_name": "🟣 Nó 22 — WSO2 Choreo #2 (US-East Azure)",
+        "node_name": "🟣 Nó 22 — US-East Mesh Relay #2",
         "map_label": "N22•CH2",
         "location": "Virginia / US-East #2, EUA (e1-us-east-azure)",
-        "provider": "WSO2 Choreo Cloud (BYOC Docker #2)",
+        "provider": "Sovereign Cloud Container #2",
         "lat": 47.5,
         "lon": -123.0,
-        "role": "🟣 Cloud Relay (Choreo US #2)"
+        "role": "🟣 Cloud Relay (US-East #2)"
     },
     "6pq6ifyhhemh2pujbnr2i56mod6d7kpeu7s57i4syvxhdrltcztowtad.onion": {
-        "node_name": "🟣 Nó 23 — WSO2 Choreo #3 (US-East Azure)",
+        "node_name": "🟣 Nó 23 — US-East Mesh Relay #3",
         "map_label": "N23•CH3",
         "location": "Virginia / US-East #3, EUA (e1-us-east-azure)",
-        "provider": "WSO2 Choreo Cloud (BYOC Docker #3)",
+        "provider": "Sovereign Cloud Container #3",
         "lat": 40.0,
         "lon": -123.0,
-        "role": "🟣 Cloud Relay (Choreo US #3)"
+        "role": "🟣 Cloud Relay (US-East #3)"
     },
     "kr2aex6umihb5bcdspc2q4npasng7zoee4i6ixx3qxgwcegscibis6id.onion": {
-        "node_name": "🟣 Nó 24 — WSO2 Choreo #4 (US-East Azure)",
+        "node_name": "🟣 Nó 24 — US-East Mesh Relay #4",
         "map_label": "N24•CH4",
         "location": "Virginia / US-East #4, EUA (e1-us-east-azure)",
-        "provider": "WSO2 Choreo Cloud (BYOC Docker #4)",
+        "provider": "Sovereign Cloud Container #4",
         "lat": 32.5,
         "lon": -120.0,
-        "role": "🟣 Cloud Relay (Choreo US #4)"
+        "role": "🟣 Cloud Relay (US-East #4)"
     },
     "wzhsoh6ovtwvl7uthirgvpfry5zxo3bwm3rttsmmj2rkvgl7gbqkyaid.onion": {
-        "node_name": "🟣 Nó 25 — WSO2 Choreo #5 (US-East Azure)",
+        "node_name": "🟣 Nó 25 — US-East Mesh Relay #5",
         "map_label": "N25•CH5",
         "location": "Virginia / US-East #5, EUA (e1-us-east-azure)",
-        "provider": "WSO2 Choreo Cloud (BYOC Docker #5)",
+        "provider": "Sovereign Cloud Container #5",
         "lat": 25.0,
         "lon": -114.0,
-        "role": "🟣 Cloud Relay (Choreo US #5)"
+        "role": "🟣 Cloud Relay (US-East #5)"
     },
     "4nz52tmtrs4p5dgzwaukx2vin6ugvo3stck3wax7gom63fbfcaairlad.onion": {
         "node_name": "📱 Nó 26 — Relay Mobile Zero-Leak (Android)",
@@ -1358,7 +1358,7 @@ _COLOCATED_PVE_HS_PEERS = {
     "wzhsoh6ovtwvl7uthirgvpfry5zxo3bwm3rttsmmj2rkvgl7gbqkyaid.onion",
 }
 
-_COLOCATED_GCP_8082_PEERS = {
+_COLOCATED_USEAST_8082_PEERS = {
     "wfi3nwuzk2tgrsf2scdy4nb6x6rtiocit4n26477zdlvdvshkgip3ayd.onion",
     "bk7iegv3v232ycjyf5ylwsdx42iozvy2dhhff5zn3ciwa3g2lkifdlad.onion",
     "5s6w6556f2eov2p6wlsuavaxh7si2kaswjwi5reojnovbzemducjzjqd.onion",
@@ -1383,13 +1383,13 @@ def _resolve_fast_lane_url(peer_onion: str) -> str | None:
     my_dom = get_my_onion_domain() or ""
     if (my_dom.startswith("onion4zr3") or my_dom.startswith("kn4u2xxl")) and peer_onion in _COLOCATED_PVE_HS_PEERS:
         return "http://127.0.0.1:8080"
-    # Co-located GCP US-East1 (8080) & multi-HS relay (8082) on same VM
-    if my_dom.startswith("jz6urt6c") or my_dom in _COLOCATED_GCP_8082_PEERS:
-        if peer_onion in _COLOCATED_GCP_8082_PEERS:
+    # Co-located US-East #3 (8080) & multi-HS relay (8082) on same host
+    if my_dom.startswith("jz6urt6c") or my_dom in _COLOCATED_USEAST_8082_PEERS:
+        if peer_onion in _COLOCATED_USEAST_8082_PEERS:
             return "http://127.0.0.1:8082"
         if peer_onion.startswith("jz6urt6c"):
             return "http://127.0.0.1:8080"
-    # Co-located AWS US-East N3 (8080) & N5 Virginia (8082) on same EC2 VM
+    # Co-located US-East N3 (8080) & N5 (8082) on same host
     if my_dom.startswith("e3a7jfpz") and peer_onion.startswith("xememocn"):
         return "http://127.0.0.1:8082"
     if my_dom.startswith("xememocn") and peer_onion.startswith("e3a7jfpz"):
@@ -3693,10 +3693,10 @@ def _probe_single_peer_watch(peer: str):
 def mesh_watch_loop():
     """
     Continuous Real-Time Mesh Watchdog (every 35s, initial sweep at 4s):
-    1) Pings free-tier PaaS clearnet health endpoints (Render #2 & WSO2 Choreo US-East) so
+    1) Pings free-tier PaaS clearnet health endpoints (External Cloud Relays) so
        their serverless containers stay warm without scaling to zero.
     2) Probes peers over Tor v3 SOCKS5h that have not recently confirmed via GossipSub IHAVE
-       (including LEGACY_V1_PEERS like AWS EKS & Virginia, plus recovering cloud nodes),
+       (including LEGACY_V1_PEERS and recovering sovereign mesh nodes),
        recording exact UP/DOWN/AUTO-JOIN state transitions in mesh_watch_events.
     """
     time.sleep(4)

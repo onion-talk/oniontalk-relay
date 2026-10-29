@@ -1,32 +1,47 @@
-name: Security Gate — OnionTalk Relay v2
+name: Security Gate — OnionTalk Relay v1.5.0 (Zero-Leak & Strix)
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+    tags: ["v*"]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   strix-relay-gate:
-    name: 🛡️ Strix Relay Security Gate (HTTP 426 + Founder Auth)
+    name: "🛡️ Strix Relay Zero-Leak, Anti-Hardcode & Protocol Gate"
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install dependencies & Run Strix Relay Security Checks
+      - name: Run Zero-Leak & Anti-Hardcode Secret Scanner
+        run: python3 scripts/zero_leak_scanner.py
+
+      - name: Install Dependencies & Run Strix Relay Security Gate (HTTP 426 + Ed25519 Founder Auth + Zero-Leak Health)
         run: |
           python3 -m py_compile relay.py
           pip install --quiet -r requirements.txt
           python3 - <<'EOF'
           import relay
           assert relay.MIN_CLIENT_VERSION_CODE >= 36, "MIN_CLIENT_VERSION_CODE must be >= 36"
+          assert relay.LATEST_CLIENT_VERSION_CODE >= 36, "LATEST_CLIENT_VERSION_CODE must be >= 36"
           assert relay.ENFORCE_HARD_UPDATE_CUT is True, "ENFORCE_HARD_UPDATE_CUT must be True"
           c = relay.app.test_client()
           cid = "@" + ("a" * 64) + ":onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion"
@@ -35,5 +50,9 @@ jobs:
           for ep in ["/api/v1/founder/verify-allowance", "/api/v1/founder/stop-node", "/api/v1/founder/revoke"]:
               r401 = c.post(ep, json={"user_id": cid})
               assert r401.status_code == 401, f"Expected 401 on {ep}, got {r401.status_code}"
-          print("[STRIX-RELAY-CI] ALL CHECKS PASSED (HTTP 426 Legacy Cut + HTTP 401 Founder Auth)")
+          h = c.get("/health")
+          assert h.status_code == 200, "/health must return 200"
+          h_json = h.get_json()
+          assert h_json.get("status") in ("ok", "healthy"), f"Expected status=='ok', got {h_json}"
+          print("[STRIX-RELAY-CI] ALL CHECKS PASSED (Zero-Leak + HTTP 426 Legacy Cut + HTTP 401 Founder Auth + Health OK)")
           EOF

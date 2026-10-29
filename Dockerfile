@@ -2,7 +2,7 @@ FROM python:3.12.8-slim-bookworm
 
 LABEL org.opencontainers.image.title="OnionTalk Federated Relay Node (All-in-One)"
 LABEL org.opencontainers.image.description="Zero-Trust Tor v3 Hidden Service & E2EE Gossip Relay for OnionTalk Messenger"
-LABEL org.opencontainers.image.authors="Erik Tonon <security@oniontalk.org>"
+LABEL org.opencontainers.image.authors="OnionTalk Core <security@oniontalk.org>"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates procps libevent-2.1-7 libcap2 \

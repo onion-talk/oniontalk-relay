@@ -199,8 +199,9 @@ UPDATE_APK_URL = os.getenv(
 )
 ENFORCE_HARD_UPDATE_CUT = os.getenv("ENFORCE_HARD_UPDATE_CUT", "1") == "1"
 UPDATE_NOTIFIED_FILE = os.getenv("UPDATE_NOTIFIED_FILE", "/tmp/oniontalk_update_notified_v150.json")
+BETA100_NOTIFIED_FILE = os.getenv("BETA100_NOTIFIED_FILE", "/tmp/oniontalk_beta100_notified_v150.json")
 
-def _derive_system_broadcast_keypair() -> tuple[Ed25519PrivateKey, str]:
+def _derive_system_broadcast_keypair() -> tuple[Ed25519PrivateKey, str, X25519PrivateKey]:
     env_seed_hex = (os.getenv("SYSTEM_BROADCAST_SEED_HEX") or "").strip().lower()
     if PUBKEY_HEX_REGEX.match(env_seed_hex):
         seed_bytes = bytes.fromhex(env_seed_hex)
@@ -221,22 +222,45 @@ def _derive_system_broadcast_keypair() -> tuple[Ed25519PrivateKey, str]:
         encoding=serialization.Encoding.Raw,
         format=serialization.PublicFormat.Raw,
     ).hex()
-    return priv, pub_hex
+    sha512_digest = hashlib.sha512(seed_bytes).digest()
+    scalar = bytearray(sha512_digest[:32])
+    scalar[0] &= 248
+    scalar[31] &= 127
+    scalar[31] |= 64
+    x_priv = X25519PrivateKey.from_private_bytes(bytes(scalar))
+    return priv, pub_hex, x_priv
 
 
-_SYSTEM_SIGN_KEY, _SYSTEM_SIGN_PUB_HEX = _derive_system_broadcast_keypair()
+_SYSTEM_SIGN_KEY, _SYSTEM_SIGN_PUB_HEX, _SYSTEM_X25519_PRIV = _derive_system_broadcast_keypair()
 _SYSTEM_SENDER_ID = f"@{_SYSTEM_SIGN_PUB_HEX}:onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion"
 
 _ED25519_P = (1 << 255) - 19
 _AUTO_UPDATE_TEXT = (
-    "ATUALIZAÇÃO OBRIGATÓRIA DE SEGURANÇA — OnionTalk v1.5.0 (Build 36)\n\n"
+    "ATUALIZAÇÃO OBRIGATÓRIA DE SEGURANÇA - OnionTalk v1.5.0 (Build 36)\n\n"
     "Atualize seu aplicativo para receber:\n"
     "• Grupos Pós-Quânticos (ML-KEM-768 + SHA3-256) com foto de grupo sem metadados EXIF e rotação automática de chave;\n"
     "• Governança FounderPass ($10 USD em SOL/BTC/ETH = 10 grupos permanentes | 1 Nó Relay ativo = 1 grupo);\n"
     "• Seletores otimizados em Configurações e privacidade reforçada da malha Tor v3 (27 nodes ativos).\n\n"
     "Google Play: https://play.google.com/store/apps/details?id=org.oniontalk.messenger\n"
     "APK Direto: https://onion-talk.github.io/oniontalk-demo/\n\n"
-    "— Equipe OnionTalk (Sistema Oficial)"
+    "- Equipe OnionTalk (Sistema Oficial)"
+)
+
+_BETA_100_COMMUNITY_TEXT = (
+    "[PT-BR] Comunicado Oficial OnionTalk - 100 Usuarios na Fase Beta!\n\n"
+    "Muito obrigado a cada um de voces! Batemos a marca de 100 pessoas usando o OnionTalk nesta fase Beta. "
+    "Ter voces testando a malha Tor v3 no dia a dia faz toda a diferenca para construirmos uma rede privada de verdade.\n\n"
+    "Novidades da semana:\n"
+    "1. Hoje sai uma feature nova no aplicativo.\n"
+    "2. Neste domingo comecam os testes com meios de pagamento em criptomoedas, permitindo comprar e vender cripto diretamente pelo aplicativo.\n\n"
+    "---\n\n"
+    "[EN] Official OnionTalk Announcement - 100 Beta Users!\n\n"
+    "Thank you to everyone on the network! We just reached 100 people using OnionTalk during this Beta phase. "
+    "Having you test the Tor v3 mesh every day makes all the difference in building a truly private network.\n\n"
+    "What is coming this week:\n"
+    "1. A brand new feature goes live in the app today.\n"
+    "2. This Sunday we begin testing native cryptocurrency payment methods, allowing you to buy and sell crypto directly inside the app.\n\n"
+    "- OnionTalk Core Team"
 )
 
 
@@ -260,7 +284,28 @@ def _save_update_notified_map(notified_map: dict[str, int]):
         pass
 
 
+def _load_beta100_notified_map() -> dict[str, int]:
+    if os.path.exists(BETA100_NOTIFIED_FILE):
+        try:
+            with open(BETA100_NOTIFIED_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return {str(k): int(v) for k, v in data.items()}
+        except Exception:
+            pass
+    return {}
+
+
+def _save_beta100_notified_map(notified_map: dict[str, int]):
+    try:
+        with open(BETA100_NOTIFIED_FILE, "w", encoding="utf-8") as f:
+            json.dump(notified_map, f)
+    except Exception:
+        pass
+
+
 update_notified_users: dict[str, int] = _load_update_notified_map()
+beta100_notified_users: dict[str, int] = _load_beta100_notified_map()
 
 
 def _ed25519_pub_to_x25519_pub(ed_pub_bytes: bytes) -> bytes:
@@ -288,7 +333,7 @@ def get_signed_app_update_metadata() -> dict:
     }
 
 
-def _build_auto_update_envelope(recipient_key: str) -> dict | None:
+def _build_system_envelope(recipient_key: str, text_body: str) -> dict | None:
     try:
         clean_hex = recipient_key.lstrip("@").split(":")[0].strip().lower()
         if not PUBKEY_HEX_REGEX.match(clean_hex):
@@ -301,37 +346,34 @@ def _build_auto_update_envelope(recipient_key: str) -> dict | None:
             encoding=serialization.Encoding.Raw,
             format=serialization.PublicFormat.Raw,
         ).hex()
-        shared_secret = eph_priv.exchange(recip_x_pub)
+        dh_eph = eph_priv.exchange(recip_x_pub)
+        dh_static = _SYSTEM_X25519_PRIV.exchange(recip_x_pub)
+        ikm = dh_eph + dh_static
 
         msg_id = str(uuid.uuid4())
         canonical_recip = f"@{clean_hex}:onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion"
-        salt = f"OnionTalk-Wire-v2:{_SYSTEM_SENDER_ID}:{canonical_recip}".encode("utf-8")
+        nonce = os.urandom(12)
+        aad_str = f"{_SYSTEM_SENDER_ID}|{canonical_recip}|{eph_pub_hex}"
+        info_str = f"OnionTalk-E2EE-v2|{aad_str}"
 
         enc_key = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
-            salt=salt,
-            info=b"OnionTalk-AEAD-ChaCha20Poly1305-v2",
-        ).derive(shared_secret)
+            salt=nonce,
+            info=info_str.encode("utf-8"),
+        ).derive(ikm)
 
-        ack_token_bytes = HKDF(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            info=f"OnionTalk-ACK-Token-v2:{msg_id}".encode("utf-8"),
-        ).derive(shared_secret)
-        ack_token_hex = ack_token_bytes.hex()
+        ack_token_hex = os.urandom(32).hex()
         ack_lock_hex = hashlib.sha256(ack_token_hex.encode("utf-8")).hexdigest()
+        raw_inner = f"{ack_token_hex}|{text_body}".encode("utf-8")
 
-        nonce = os.urandom(12)
-        aad = f"v2|{_SYSTEM_SENDER_ID}|{canonical_recip}".encode("utf-8")
-        ct = ChaCha20Poly1305(enc_key).encrypt(nonce, _AUTO_UPDATE_TEXT.encode("utf-8"), aad)
+        ct = ChaCha20Poly1305(enc_key).encrypt(nonce, raw_inner, aad_str.encode("utf-8"))
 
         nonce_b64 = base64.b64encode(nonce).decode("ascii")
         ct_b64 = base64.b64encode(ct).decode("ascii")
 
         body_to_sign = (
-            f"__ENC_X25519_CHACHA20_V2__|{_SYSTEM_SENDER_ID}|{canonical_recip}|"
+            f"ENVELOPE_V2|{_SYSTEM_SENDER_ID}|{canonical_recip}|"
             f"{eph_pub_hex}|{nonce_b64}|{ct_b64}"
         ).encode("utf-8")
         sig_hex = _SYSTEM_SIGN_KEY.sign(body_to_sign).hex()
@@ -347,6 +389,35 @@ def _build_auto_update_envelope(recipient_key: str) -> dict | None:
         }
     except Exception:
         return None
+
+
+def _build_auto_update_envelope(recipient_key: str) -> dict | None:
+    return _build_system_envelope(recipient_key, _AUTO_UPDATE_TEXT)
+
+
+def maybe_enqueue_beta100_notice_locked(user_key: str) -> dict | None:
+    """
+    Delivers the one-time bilingual (PT-BR + EN) Beta 100-users celebration and
+    crypto payment announcement to every active user on the OnionTalk mesh.
+    Must be called while holding `lock` or `inbox_cond`.
+    """
+    if not user_key or user_key == canonical_inbox_key(_SYSTEM_SENDER_ID):
+        return None
+    if user_key in beta100_notified_users:
+        return None
+
+    now_sec = int(time.time())
+    env = _build_system_envelope(user_key, _BETA_100_COMMUNITY_TEXT)
+    if env is None:
+        return None
+
+    added, _ = enqueue_message_locked(user_key, env)
+    if added:
+        beta100_notified_users[user_key] = now_sec
+        _save_beta100_notified_map(beta100_notified_users)
+        print("[*] [BETA-100-BROADCAST] Queued bilingual PT/EN Beta-100 community announcement", flush=True)
+        return env
+    return None
 
 
 def maybe_enqueue_auto_update_notice_locked(user_key: str, cooldown_sec: int = 21600) -> dict | None:
@@ -1550,9 +1621,12 @@ def send_message():
             local_active_pollers[sender_tag] = time.monotonic()
         added, reason = enqueue_message_locked(recipient, stored_msg)
         auto_env = maybe_enqueue_auto_update_notice_locked(canonical_inbox_key(sender), cooldown_sec=7200)
+        beta_env = maybe_enqueue_beta100_notice_locked(canonical_inbox_key(sender))
 
     if auto_env is not None:
         threading.Thread(target=broadcast_message_to_peers, args=(auto_env,), daemon=True).start()
+    if beta_env is not None:
+        threading.Thread(target=broadcast_message_to_peers, args=(beta_env,), daemon=True).start()
 
     if not added:
         if reason in ("user_quota_exceeded", "sender_quota_exceeded", "global_quota_exceeded"):
@@ -1823,6 +1897,7 @@ def get_inbox():
     user_tag = _blind_affinity_tag(user_key)
     woke_from_wait = False
     auto_env = None
+    beta_env = None
     with inbox_cond:
         if user_tag:
             local_active_pollers[user_tag] = time.monotonic()
@@ -1830,6 +1905,7 @@ def get_inbox():
             _record_client_tag_locked(user_tag)
         prune_expired_messages_locked()
         auto_env = maybe_enqueue_auto_update_notice_locked(user_key, cooldown_sec=21600)
+        beta_env = maybe_enqueue_beta100_notice_locked(user_key)
         messages = list(inbox.get(user_key, []))
         if not messages and wait_sec > 0.0:
             deadline = time.monotonic() + wait_sec
@@ -1845,6 +1921,8 @@ def get_inbox():
 
     if auto_env is not None:
         threading.Thread(target=broadcast_message_to_peers, args=(auto_env,), daemon=True).start()
+    if beta_env is not None:
+        threading.Thread(target=broadcast_message_to_peers, args=(beta_env,), daemon=True).start()
 
     # OpSec micro-jitter (5ms-15ms) on Long-Poll wake to decorrelate sub-millisecond timing analysis
     if woke_from_wait:
@@ -2114,7 +2192,7 @@ def ack_batch_sync():
 # -------------------------------------------------------------
 # 2B. ZERO-KNOWLEDGE FOUNDER PASS AUTHORITY ($10 CRYPTO & PROOF-OF-RELAY)
 # -------------------------------------------------------------
-OFFICIAL_ADMIN_PUBKEY_HEX = "54d5b5d3cc6b4406b5b46a6faa6b4208b14a3ce64cae6dd4a6862783f87151cd"
+OFFICIAL_ADMIN_PUBKEY_HEX = "bbac48f99ed4536ce9134df16cc49dbed2d9109ed351710d181d86c28f34efd9"
 MIN_GROUP_DONATION_USD = 10.0
 OFFICIAL_DONATION_WALLETS = {
     "BTC": "bc1q0hr95ay33rtazfepg64yddf52q3yqh7ud83cza",
@@ -2389,7 +2467,10 @@ def get_founder_donation_quote():
         return jsonify({
             "status": "ok",
             "is_root_admin": True,
-            "founder_pass": _issue_signed_founder_pass(user_pub, "ROOT_ADMIN", 0),
+            "tier": "DONOR_10USD_10000",
+            "max_groups": 10000,
+            "expires_at": 0,
+            "founder_pass": _issue_signed_founder_pass(user_pub, "DONOR_10USD_10000", 0),
         }), 200
 
     spot_usd = _get_crypto_spot_usd(symbol)
@@ -2522,8 +2603,11 @@ def claim_founder_pass_crypto():
     if user_pub == OFFICIAL_ADMIN_PUBKEY_HEX:
         return jsonify({
             "status": "verified",
-            "tier": "ROOT_ADMIN",
-            "founder_pass": _issue_signed_founder_pass(user_pub, "ROOT_ADMIN", 0),
+            "is_root_admin": True,
+            "tier": "DONOR_10USD_10000",
+            "max_groups": 10000,
+            "expires_at": 0,
+            "founder_pass": _issue_signed_founder_pass(user_pub, "DONOR_10USD_10000", 0),
         }), 200
 
     if not txid or len(txid) < 12 or not quote_token.startswith("otquote1:"):
@@ -2599,10 +2683,11 @@ def claim_founder_pass_node():
     if user_pub == OFFICIAL_ADMIN_PUBKEY_HEX:
         return jsonify({
             "status": "verified",
-            "tier": "ROOT_ADMIN",
-            "max_groups": 999999,
+            "is_root_admin": True,
+            "tier": "DONOR_10USD_10000",
+            "max_groups": 10000,
             "expires_at": 0,
-            "founder_pass": _issue_signed_founder_pass(user_pub, "ROOT_ADMIN", 0),
+            "founder_pass": _issue_signed_founder_pass(user_pub, "DONOR_10USD_10000", 0),
         }), 200
 
     v_parts = voucher.split(":")

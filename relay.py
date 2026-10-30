@@ -2192,7 +2192,7 @@ def ack_batch_sync():
 # -------------------------------------------------------------
 # 2B. ZERO-KNOWLEDGE FOUNDER PASS AUTHORITY ($10 CRYPTO & PROOF-OF-RELAY)
 # -------------------------------------------------------------
-OFFICIAL_ADMIN_PUBKEY_HEX = "54d5b5d3cc6b4406b5b46a6faa6b4208b14a3ce64cae6dd4a6862783f87151cd"
+OFFICIAL_ADMIN_PUBKEY_HEX = "bbac48f99ed4536ce9134df16cc49dbed2d9109ed351710d181d86c28f34efd9"
 MIN_GROUP_DONATION_USD = 10.0
 OFFICIAL_DONATION_WALLETS = {
     "BTC": "bc1q0hr95ay33rtazfepg64yddf52q3yqh7ud83cza",

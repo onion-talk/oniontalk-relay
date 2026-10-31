@@ -21,9 +21,9 @@
 ## 🚀 What's New in `v1.5.4` (`versionCode = 48` / Build 48) & Relay Node `v1.5.2` (`Build 11`) & Mesh `v=31` — Sovereign PQC Groups, In-RAM Image Blur Studio, Post-Quantum Hybrid Encryption (`ML-KEM-768`), Dual Warm Socket Pool (`~1.13s` E2E) & 20-Node Zero-Leak Mesh
 
 - **📦 Direct Signed APK Downloads & Web Container (`v1.5.4` — Latest Release Build 48)**:
-  - **Main Messenger APK (`org.oniontalk.messenger` `v1.5.4` Build 48)**: [**Download `OnionTalk-v1.5.4.apk`**](https://github.com/onion-talk/oniontalk-demo/releases/download/v1.5.4/OnionTalk-v1.5.4.apk) (`SHA-256: 8593569ad6f939150951ac59ca715ac2ee6534d15c591a4503fb2b8401292acf`)
-  - **Standalone Android Relay Node APK (`org.oniontalk.relaynode` `v1.5.2` Build 11)**: [**Download `OnionTalk-RelayNode-v1.5.2.apk`**](https://github.com/onion-talk/oniontalk-relay/releases/download/v1.5.2/OnionTalk-RelayNode-v1.5.2.apk) (`SHA-256: eac1ccbe461eabb9f42a6485628c0d9b3cce0f378ba217572a1beba975c5279c`)
-  - **🐳 Desktop & Web Container + Embedded Tor v3 Relay (`Windows / Linux / macOS`)**: [**`eriktonon/oniontalk-web:latest`**](https://hub.docker.com/r/eriktonon/oniontalk-web) (`v1.5.4-build48` — `sha256:f0f2912ef2c675f29f30d3f6cb7259b2724b435ab37208f20bc23a86e676d1b1`) — Self-contained Rust Black-Box Web Messenger + active Tor v3 Hidden Service Relay listening on `127.0.0.1:8420`.
+  - **Main Messenger APK (`org.oniontalk.messenger` `v1.5.4` Build 48)**: [**Download `OnionTalk.apk` (latest)**](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/OnionTalk.apk) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/SHA256SUMS.txt))
+  - **Standalone Android Relay Node APK (`org.oniontalk.relaynode` `v1.5.2` Build 11)**: [**Download `OnionTalk-RelayNode.apk` (latest)**](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/OnionTalk-RelayNode.apk) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/SHA256SUMS.txt))
+  - **🐳 Desktop & Web Container + Embedded Tor v3 Relay (`Windows / Linux / macOS`)**: [**`eriktonon/oniontalk-web:latest`**](https://hub.docker.com/r/eriktonon/oniontalk-web) ![Docker tag](https://img.shields.io/docker/v/eriktonon/oniontalk-web?sort=semver&label=tag&style=flat-square) — Self-contained Rust Black-Box Web Messenger + active Tor v3 Hidden Service Relay listening on `127.0.0.1:8420`.
 
 - **🛡️ Key Cryptographic & P2P Mesh Breakthroughs in `v1.5.4` (`Build 48` & Relay `Build 10`)**:
   1. **Sovereign Post-Quantum Encrypted Groups (`PQC Groups`) & Anti-Spam Proof-of-Community**: End-to-end encrypted multi-party group chats over Tor v3 with zero central member servers. Group creation unlocks automatically via organic local proof-of-community (`3+ mutual contacts` + `5+ days of vault maturity`, evaluated 100% locally) or immediately via an offline `Ed25519`-signed **`FounderPass`** certificate granted to community Relay Node Operators (`2+ hours active uptime`) or voluntary crypto supporters.
@@ -35,11 +35,7 @@
 ---
 ## 🚀 What's New in `v1.4.1` (`versionCode = 18` / Internal `vc17`) — Password-Locked Messages & Chats, Unified Long-Press Menu, Profile Photo Privacy, 15s Auto-Lock & Official Video Suite
 
-- **📦 Direct Signed APK Downloads (`v1.4.1` — Latest Fixed Build 18)**:
-  - **Main Messenger APK (`org.oniontalk.messenger` `v1.4.1` Build 18)**: [**Download `OnionTalk-v1.5.4.apk`**](https://github.com/onion-talk/oniontalk-demo/releases/download/v1.5.4/OnionTalk-v1.5.4.apk) (`SHA-256: 68f3d5785919acaf0820c238f93f5db0cb02df5986db457ec783d573dbc652a8`)
-  - **Release Build 18 APK (`versionCode = 18`)**: [**Download `OnionTalk-v1.4.1-b18-release.apk`**](https://github.com/onion-talk/oniontalk-demo/releases/download/v1.5.4/OnionTalk-v1.5.4.apk)
-  - **Internal Test Track Build 17 APK (`versionCode = 17`)**: [**Download `OnionTalk-v1.4.1-b17-internal.apk`**](https://github.com/onion-talk/oniontalk-demo/releases/download/v1.5.4/OnionTalk-v1.5.4.apk) (`SHA-256: b110ff9db1b75bf4ec6229284a6dd2f47040175003974f8a50bfe9ef2f100c5c`)
-  - **Standalone Android Relay Node APK (`org.oniontalk.relaynode` `v1.4.1` Build 3)**: [**Download `OnionTalk-RelayNode-v1.4.2.apk`**](https://github.com/onion-talk/oniontalk-demo/releases/download/v1.4.1-demo/OnionTalk-RelayNode-v1.4.2.apk) (`SHA-256: befe94bcf2e66a2fe067b47b2114af9f226cf3405292df7e67ab5e29782f3f1b`)
+- 📦 Older binaries are not mirrored here. Latest signed build: [GitHub Releases](https://github.com/onion-talk/oniontalk-demo/releases).
 - **🎬 New Official `v1.4.1` Promotional & Feature Walkthrough Videos**:
   - [**▶ Watch Official Promo v1.4.1 (Português 1080p)**](https://github.com/onion-talk/oniontalk-demo/raw/main/video/OnionTalk-v1.4.1-Promo-Oficial-PT.mp4)
   - [**▶ Watch Official Promo v1.4.1 (English 1080p)**](https://github.com/onion-talk/oniontalk-demo/raw/main/video/OnionTalk-v1.4.1-Promo-Official-EN.mp4)
@@ -68,9 +64,7 @@
 
 ## 🚀 What's New in `v1.4.0` (`versionCode = 14`) — 20-Node Global Mesh (8 Countries), Selective `FLAG_SECURE`, Instant Tor Auto-Heal & GZIP File Transfers
 
-- **📦 Direct Signed APK Downloads (`v1.4.0`)**:
-  - **Main Messenger APK (`org.oniontalk.messenger`)**: [**Download `OnionTalk-v1.5.4.apk`**](https://github.com/onion-talk/oniontalk-demo/releases/download/v1.5.4/OnionTalk-v1.5.4.apk) (`SHA-256: d11ee5629b6bffa32658d80e2d22cd5582e37c84d3b69bd85dffc424793688c4`)
-  - **Standalone Android Relay Node APK (`org.oniontalk.relaynode`)**: [**Download `OnionTalk-RelayNode-v1.4.2.apk`**](https://github.com/onion-talk/oniontalk-demo/releases/download/v1.4.1-demo/OnionTalk-RelayNode-v1.4.2.apk) (`SHA-256: befe94bcf2e66a2fe067b47b2114af9f226cf3405292df7e67ab5e29782f3f1b`)
+- 📦 Older binaries are not mirrored here. Latest signed build: [GitHub Releases](https://github.com/onion-talk/oniontalk-demo/releases).
 - **🌐 20 Active Tor v3 Relays Across 8 Countries (`BR`, `US`, `FR`, `DE`, `RU`, `SG`, `JP`, `CN`)**:
   - Added **Node 16 (Global Mesh Node Nuremberg, Germany)**: `o5zqqfl5znzexdojfnxgub5jnjelxdahbyxasjp57sx6fbxtjeqovpad.onion`
   - Added **Node 17 (AP-East Mesh Hangzhou, China — GFW Bypass)**: `2amizuhb3p5x2lk3sra7f7thm5tgs7qtnysgowqpmexcqi4cuwyv7vad.onion`

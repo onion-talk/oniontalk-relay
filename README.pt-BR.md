@@ -15,13 +15,18 @@ Este pacote contém tudo o que você precisa para rodar um **Nó Federado do Oni
 ## 📦 Estrutura da Pasta
 
 ```text
-server/
-├── docker-compose.yml   # Container único All-in-One (Tor 0.4.9.14 oficial embutido + Relay API)
-├── Dockerfile           # Imagem Debian Bookworm + Tor Project 0.4.9.14 + Gunicorn
-├── entrypoint.sh        # Inicializa /data/hidden_service (0700), sobe o daemon Tor v3 e watchdog
-├── relay.py             # Motor de roteamento, fila em RAM e Gossip Mesh
-├── requirements.txt     # Dependências mínimas (Flask, Requests+SOCKS, Gunicorn)
-└── README.md            # Este guia de instalação e operação
+oniontalk-relay/
+├── Cargo.toml           # Manifesto Rust (Tokio, Axum, DashMap, Ed25519-dalek, Sha2/Sha3)
+├── Cargo.lock           # Grafo de dependências travado determinístico
+├── docker-compose.yml   # Container único All-in-One (Tor 0.4.9.14 oficial embutido + Rust Relay API)
+├── Dockerfile           # Build multi-stage Rust 1.85 + Debian Bookworm + Tor Project 0.4.9.14
+├── entrypoint.sh        # Inicializa /data/hidden_service (0700), sobe o daemon Tor v3 e o binário Rust
+├── src/
+│   ├── main.rs          # Motor de roteamento em RAM (DashMap Zero-GIL), GossipSub v1.2 e Stream de Voz
+│   ├── crypto.rs        # Verificação Ed25519, travas SHA-256 ACK e proteção anti-replay
+│   ├── founder.rs       # Governança FounderPass, cotações on-chain e vouchers de nó
+│   └── geo.rs           # Topologia federada e metadados da malha
+└── README.md            # Guia de instalação e operação
 ```
 
 ---

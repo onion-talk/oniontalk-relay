@@ -1,8 +1,8 @@
-FROM rust:1.85-slim-bookworm AS builder
+FROM rust:slim-bookworm AS builder
 
 WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config libssl-dev ca-certificates \
+    pkg-config build-essential libssl-dev ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 COPY Cargo.toml Cargo.lock ./
@@ -11,16 +11,14 @@ RUN cargo build --release --locked
 
 FROM debian:bookworm-slim
 
-LABEL org.opencontainers.image.title="OnionTalk Federated Relay Node (Rust Native Tokio/Axum)"
-LABEL org.opencontainers.image.description="Zero-Trust Tor v3 Hidden Service & E2EE Gossip Relay for OnionTalk Messenger (oniontalk-relay-rs)"
-LABEL org.opencontainers.image.authors="OnionTalk Core <security@oniontalk.org>"
+LABEL org.opencontainers.image.title="OnionTalk Federated Relay Node (Rust Native Tokio/Axum)" \
+      org.opencontainers.image.version="1.5.7" \
+      org.opencontainers.image.description="Zero-Trust Tor v3 Hidden Service & E2EE Gossip Relay for OnionTalk Messenger (oniontalk-relay-rs v1.5.7)" \
+      org.opencontainers.image.authors="OnionTalk Core <security@oniontalk.org>"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates procps libevent-2.1-7 libcap2 \
-    && curl -sSL "https://deb.torproject.org/torproject.org/pool/main/t/tor/tor_0.4.9.14-1~d12.bookworm+1_amd64.deb" -o /tmp/tor.deb \
-    && dpkg-deb -x /tmp/tor.deb /tmp/tor_pkg \
-    && cp -a /tmp/tor_pkg/usr/* /usr/ \
-    && rm -rf /tmp/tor.deb /tmp/tor_pkg /var/lib/apt/lists/* \
+    tor curl ca-certificates procps \
+    && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /data && chmod 777 /data
 
 WORKDIR /app

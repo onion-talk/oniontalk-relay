@@ -159,11 +159,16 @@ curl http://127.0.0.1:8080/api/v1/peers/list
 
 ```text
 oniontalk-relay/
-├── docker-compose.yml   # Single-container All-in-One Relay (Embedded Tor 0.4.9.14 + Gunicorn API)
-├── Dockerfile           # Official Debian Bookworm + Tor Project 0.4.9.14 + Gunicorn container image
-├── entrypoint.sh        # Initializes /data/hidden_service (0700), starts Tor v3 daemon & watchdog
-├── relay.py             # Zero-knowledge RAM routing engine, Ed25519 auth, PEX gossip & ACK lock
-├── requirements.txt     # Pinned dependencies (Flask, Gunicorn, Requests[socks], Cryptography)
+├── Cargo.toml           # Rust crate manifest (Tokio, Axum, DashMap, Ed25519-dalek, Sha2/Sha3)
+├── Cargo.lock           # Deterministic locked dependency graph
+├── docker-compose.yml   # Single-container All-in-One Relay (Embedded Tor 0.4.9.14 + Rust Axum API)
+├── Dockerfile           # Multi-stage Rust 1.85 builder + Debian Bookworm + Tor Project 0.4.9.14
+├── entrypoint.sh        # Initializes /data/hidden_service (0700), starts Tor v3 daemon & Rust binary
+├── src/
+│   ├── main.rs          # Zero-GIL DashMap RAM routing, GossipSub v1.2, Isochronous Voice Stream & Strix tests
+│   ├── crypto.rs        # Ed25519 transcript verification, SHA-256 ACK preimage locks & replay guards
+│   ├── founder.rs       # Cryptographic FounderPass verification, multi-chain quotes & node vouchers
+│   └── geo.rs           # Federated mesh topology & blind geo-distribution registry
 └── README.md            # Deployment and operations guide
 ```
 

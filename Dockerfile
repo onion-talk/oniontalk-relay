@@ -1,7 +1,18 @@
-FROM python:3.12.8-slim-bookworm
+FROM rust:1.85-slim-bookworm AS builder
 
-LABEL org.opencontainers.image.title="OnionTalk Federated Relay Node (All-in-One)"
-LABEL org.opencontainers.image.description="Zero-Trust Tor v3 Hidden Service & E2EE Gossip Relay for OnionTalk Messenger"
+WORKDIR /build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+RUN cargo build --release --locked
+
+FROM debian:bookworm-slim
+
+LABEL org.opencontainers.image.title="OnionTalk Federated Relay Node (Rust Native Tokio/Axum)"
+LABEL org.opencontainers.image.description="Zero-Trust Tor v3 Hidden Service & E2EE Gossip Relay for OnionTalk Messenger (oniontalk-relay-rs)"
 LABEL org.opencontainers.image.authors="OnionTalk Core <security@oniontalk.org>"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -13,17 +24,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && mkdir -p /data && chmod 777 /data
 
 WORKDIR /app
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
-
-COPY relay.py /app/relay.py
+COPY --from=builder /build/target/release/oniontalk-relay-rs /usr/local/bin/oniontalk-relay-rs
 COPY entrypoint.sh /app/entrypoint.sh
-RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh && chmod -R 755 /app
+RUN sed -i 's/\r$//' /app/entrypoint.sh \
+    && chmod +x /usr/local/bin/oniontalk-relay-rs /app/entrypoint.sh \
+    && chmod -R 755 /app
 
 VOLUME ["/data"]
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS http://127.0.0.1:${PORT:-8080}/health || exit 1
 
 CMD ["/app/entrypoint.sh"]

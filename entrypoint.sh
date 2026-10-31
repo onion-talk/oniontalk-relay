@@ -13,10 +13,13 @@ chown -R "$(id -u):$(id -g)" "$DATA_DIR/tor_data" "$DATA_DIR/hidden_service" 2>/
 chmod 700 "$DATA_DIR/tor_data" "$DATA_DIR/hidden_service"
 chmod 600 "$DATA_DIR/hidden_service/"* 2>/dev/null || true
 
-# Support optional external Tor daemon (e.g. legacy multi-container compose)
+export RELAY_BIND_ADDR="${RELAY_BIND_ADDR:-0.0.0.0:${PORT}}"
+export RELAY_NODE_KEY_FILE="${RELAY_NODE_KEY_FILE:-$DATA_DIR/oniontalk_node_ed25519.key}"
+
+# Support optional external Tor daemon (e.g. multi-container compose)
 if [ "${EXTERNAL_TOR:-0}" = "1" ]; then
-    echo "[*] [ONIONTALK] Using external Tor daemon: ${TOR_SOCKS_PROXY:-socks5h://tor-daemon:9050}"
-    exec gunicorn -w 1 --threads 64 --keep-alive 75 --timeout 90 -c /dev/null --pythonpath /app -b "0.0.0.0:${PORT}" relay:app
+    echo "[*] [ONIONTALK-RELAY-RS] Using external Tor daemon: ${TOR_SOCKS_PROXY:-socks5h://tor-daemon:9050}"
+    exec /usr/local/bin/oniontalk-relay-rs
 fi
 
 # Optional pre-provisioned Hidden Service v3 keys via environment variables
@@ -78,10 +81,9 @@ fi
 
 export TOR_HOSTNAME_FILE="${TOR_HOSTNAME_FILE:-$DATA_DIR/hidden_service/hostname}"
 export TOR_SOCKS_PROXY="${TOR_SOCKS_PROXY:-socks5h://127.0.0.1:${TOR_SOCKS_PORT}}"
-export RELAY_NODE_KEY_FILE="${RELAY_NODE_KEY_FILE:-$DATA_DIR/oniontalk_node_ed25519.key}"
 
 echo "===================================================================="
-echo "🧅 ONIONTALK ZERO-TRUST FEDERATED RELAY NODE (All-in-One)"
+echo "🦀 ONIONTALK ZERO-TRUST FEDERATED RELAY NODE (Rust Native v1.5.5)"
 echo "--------------------------------------------------------------------"
 echo "🌐 Hidden Service (.onion): ${ONION_ADDR}"
 echo "🔌 Local Health / API Port: ${PORT}"
@@ -89,4 +91,4 @@ echo "🧦 Internal Tor SOCKS5:     127.0.0.1:${TOR_SOCKS_PORT}"
 echo "💾 Persistent Data Dir:     ${DATA_DIR}"
 echo "===================================================================="
 
-exec gunicorn -w 1 --threads 64 --keep-alive 75 --timeout 90 -c /dev/null --pythonpath /app -b "0.0.0.0:${PORT}" relay:app
+exec /usr/local/bin/oniontalk-relay-rs

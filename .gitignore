@@ -1,4 +1,9 @@
-__pycache__/
-*.py[cod]
+/target/
+*.rs.bk
+*.swp
+.DS_Store
+.env
 *.key
-
+*.pem
+tor_data/
+hidden_service/

@@ -1,59 +1,12 @@
 stages:
   - security_test
-  - deploy_mesh
 
-variables:
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-
-strix_relay_gate:
+strix_relay_rust_gate:
   stage: security_test
-  image: python:3.12-slim
+  image: rust:1.85-slim-bookworm
   script:
-    - python3 scripts/zero_leak_scanner.py
-    - python3 -m py_compile relay.py
-    - pip install --quiet -r requirements.txt
-    - |
-      python3 - <<'EOF'
-      import relay
-      assert relay.MIN_CLIENT_VERSION_CODE >= 36, "MIN_CLIENT_VERSION_CODE must be >= 36"
-      assert relay.ENFORCE_HARD_UPDATE_CUT is True, "ENFORCE_HARD_UPDATE_CUT must be True"
-      c = relay.app.test_client()
-      cid = "@" + ("a" * 64) + ":onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion"
-      r426 = c.post("/api/v1/messages/send", headers={"X-Client-Version-Code": "35"}, json={"sender": cid, "recipient": cid, "payload": "AA==", "ack_lock": "b" * 64})
-      assert r426.status_code == 426, f"Expected 426 for legacy client, got {r426.status_code}"
-      for ep in ["/api/v1/founder/verify-allowance", "/api/v1/founder/stop-node", "/api/v1/founder/revoke"]:
-          r401 = c.post(ep, json={"user_id": cid})
-          assert r401.status_code == 401, f"Expected 401 on {ep}, got {r401.status_code}"
-      print("[STRIX-RELAY-CI] ALL CHECKS PASSED (HTTP 426 Legacy Cut + HTTP 401 Founder Auth)")
-      EOF
+    - apt-get update && apt-get install -y --no-install-recommends git pkg-config libssl-dev ca-certificates
+    - cargo test --release --locked -- --nocapture
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == "main"
-
-deploy_all_relay_nodes:
-  stage: deploy_mesh
-  image: alpine:3.20
-  needs:
-    - strix_relay_gate
-  before_script:
-    - apk add --no-cache openssh-client curl bash
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
-    - echo "$RELAY_DEPLOY_SSH_KEY_B64" | base64 -d > ~/.ssh/id_ed25519
-    - chmod 600 ~/.ssh/id_ed25519
-    - |
-      cat > ~/.ssh/config <<'EOF'
-      Host *
-        StrictHostKeyChecking no
-        UserKnownHostsFile /dev/null
-        LogLevel ERROR
-        ConnectTimeout 12
-        ServerAliveInterval 30
-      EOF
-    - chmod 600 ~/.ssh/config
-  script:
-    - RELAY_SRC="relay.py"
-    - export RELAY_SRC
-    - echo "$RELAY_DEPLOY_SCRIPT_B64" | base64 -d | bash -e
-  rules:
     - if: $CI_COMMIT_BRANCH == "main"

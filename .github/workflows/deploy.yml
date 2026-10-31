@@ -1,4 +1,4 @@
-name: Security Gate — OnionTalk Relay v1.5.0 (Zero-Leak & Strix)
+name: Security Gate — OnionTalk Relay Rust Native (Zero-Leak & Strix)
 
 on:
   push:
@@ -16,43 +16,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  strix-relay-gate:
-    name: "🛡️ Strix Relay Zero-Leak, Anti-Hardcode & Protocol Gate"
+  strix-relay-rust-gate:
+    name: "🦀 Strix Relay Rust Native Zero-Leak & Protocol Gate"
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Install Rust Stable Toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Run Zero-Leak & Anti-Hardcode Secret Scanner
-        run: python3 scripts/zero_leak_scanner.py
+      - name: Cache Cargo Registry & Target
+        uses: Swatinem/rust-cache@v2
 
-      - name: Install Dependencies & Run Strix Relay Security Gate (HTTP 426 + Ed25519 Founder Auth + Zero-Leak Health)
+      - name: Build Release Binary & Run Strix Relay Security Gate (Zero-Leak + HTTP 426 + HTTP 401 + Health)
         run: |
-          python3 -m py_compile relay.py
-          pip install --quiet -r requirements.txt
-          python3 - <<'EOF'
-          import relay
-          assert relay.MIN_CLIENT_VERSION_CODE >= 36, "MIN_CLIENT_VERSION_CODE must be >= 36"
-          assert relay.LATEST_CLIENT_VERSION_CODE >= 36, "LATEST_CLIENT_VERSION_CODE must be >= 36"
-          assert relay.ENFORCE_HARD_UPDATE_CUT is True, "ENFORCE_HARD_UPDATE_CUT must be True"
-          c = relay.app.test_client()
-          cid = "@" + ("a" * 64) + ":onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion"
-          r426 = c.post("/api/v1/messages/send", headers={"X-Client-Version-Code": "35"}, json={"sender": cid, "recipient": cid, "payload": "AA==", "ack_lock": "b" * 64})
-          assert r426.status_code == 426, f"Expected 426 for legacy client, got {r426.status_code}"
-          for ep in ["/api/v1/founder/verify-allowance", "/api/v1/founder/stop-node", "/api/v1/founder/revoke"]:
-              r401 = c.post(ep, json={"user_id": cid})
-              assert r401.status_code == 401, f"Expected 401 on {ep}, got {r401.status_code}"
-          h = c.get("/health")
-          assert h.status_code == 200, "/health must return 200"
-          h_json = h.get_json()
-          assert h_json.get("status") in ("ok", "healthy"), f"Expected status=='ok', got {h_json}"
-          print("[STRIX-RELAY-CI] ALL CHECKS PASSED (Zero-Leak + HTTP 426 Legacy Cut + HTTP 401 Founder Auth + Health OK)")
-          EOF
+          cargo test --release --locked -- --nocapture
+          cargo build --release --locked

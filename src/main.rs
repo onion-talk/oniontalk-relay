@@ -1126,7 +1126,6 @@ fn spawn_broadcast_message(state: Arc<AppState>, msg: StoredMessage) {
     });
 }
 
-#[allow(dead_code)]
 fn spawn_fast_lane_voice_sync(state: Arc<AppState>, msg: StoredMessage) {
     tokio::spawn(async move {
         let Some(current_domain) = state.get_my_onion_domain() else {
@@ -1455,6 +1454,8 @@ async fn handle_send_message(
 
     if !effective_voice_cell {
         spawn_broadcast_message(state.clone(), stored_msg);
+    } else {
+        spawn_fast_lane_voice_sync(state.clone(), stored_msg);
     }
 
     (
@@ -1579,6 +1580,12 @@ async fn handle_sync_message(
         );
     };
 
+    let is_voice_sync = data
+        .get("_voice")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+        && payload.len() <= 20_480;
+
     let stored_msg = StoredMessage {
         id: msg_id.clone(),
         sender: sender.clone(),
@@ -1586,7 +1593,7 @@ async fn handle_sync_message(
         payload,
         ack_lock,
         timestamp: safe_ts,
-        _voice: false,
+        _voice: is_voice_sync,
         claim_until: None,
     };
 
@@ -1749,18 +1756,22 @@ fn claim_deliverable_messages(mailbox: &UserMailbox, is_voice_stream: bool) -> V
     }
     let now_mono = Instant::now();
     let mut claimed = Vec::new();
-    for m in list.iter_mut() {
-        let expired_claim = m.claim_until.map(|u| u <= now_mono).unwrap_or(true);
-        if expired_claim {
-            let lease_dur = if m._voice {
-                Duration::from_secs(30)
-            } else {
-                Duration::from_millis(6500)
-            };
-            m.claim_until = Some(now_mono + lease_dur);
+    let mut kept = Vec::with_capacity(list.len());
+    for mut m in list.drain(..) {
+        if m._voice {
+            // Ephemeral real-time voice cells (__CTRL_VOICE_FRAME_V1__) are popped on first delivery
+            // so handle_voice_stream NEVER re-transmits duplicate voice frames down the NDJSON stream!
             claimed.push(m.to_wire_json());
+        } else {
+            let expired_claim = m.claim_until.map(|u| u <= now_mono).unwrap_or(true);
+            if expired_claim {
+                m.claim_until = Some(now_mono + Duration::from_millis(2500));
+                claimed.push(m.to_wire_json());
+            }
+            kept.push(m);
         }
     }
+    *list = kept;
     claimed
 }
 
@@ -1835,20 +1846,10 @@ async fn handle_get_inbox(
     };
 
     let mut woke_from_wait = false;
-    let mut messages = if mailbox.active_voice_streams.load(Ordering::Relaxed) > 0 {
-        Vec::new()
-    } else {
-        claim_deliverable_messages(&mailbox, is_voice_stream)
-    };
-    if messages.is_empty()
-        && wait_sec > 0.0
-        && mailbox.active_voice_streams.load(Ordering::Relaxed) == 0
-    {
+    let mut messages = claim_deliverable_messages(&mailbox, is_voice_stream);
+    if messages.is_empty() && wait_sec > 0.0 {
         let deadline = Instant::now() + Duration::from_secs_f64(wait_sec);
         loop {
-            if mailbox.active_voice_streams.load(Ordering::Relaxed) > 0 {
-                break;
-            }
             let notified = mailbox.notify.notified();
             messages = claim_deliverable_messages(&mailbox, is_voice_stream);
             if !messages.is_empty() {
@@ -1860,9 +1861,6 @@ async fn handle_get_inbox(
             }
             let remaining = deadline - now;
             if tokio::time::timeout(remaining, notified).await.is_err() {
-                break;
-            }
-            if mailbox.active_voice_streams.load(Ordering::Relaxed) > 0 {
                 break;
             }
             messages = claim_deliverable_messages(&mailbox, is_voice_stream);
@@ -1923,7 +1921,7 @@ fn process_piggyback_acks_with_state(
         let mut kept = Vec::with_capacity(list.len());
         for m in list.drain(..) {
             if let Some(tok) = piggyback_tokens.get(&m.id) {
-                if verify_ack_proof(&m.ack_lock, tok) {
+                if (m._voice && !tok.is_empty()) || verify_ack_proof(&m.ack_lock, tok) {
                     acked_ids_list.push(m.id.clone());
                     verified_piggyback_tokens.insert(m.id.clone(), tok.clone());
                     if state.synced_peers_by_msg.contains_key(&m.id) {
@@ -2072,10 +2070,11 @@ async fn handle_voice_stream(
                     .insert(user_tag_clone.clone(), now);
             }
 
+            let notified = mailbox.notify.notified();
             let mut claimed = claim_deliverable_messages(&mailbox, true);
             if !claimed.is_empty() {
-                // Isochronous OpSec micro-jitter (6ms..18ms) breaks exact microsecond input-output correlation
-                let jitter_ms = rand::thread_rng().gen_range(6..=18);
+                // Isochronous OpSec micro-jitter (2ms..6ms) breaks exact microsecond input-output correlation
+                let jitter_ms = rand::thread_rng().gen_range(2..=6);
                 tokio::time::sleep(Duration::from_millis(jitter_ms)).await;
                 let extra = claim_deliverable_messages(&mailbox, true);
                 if !extra.is_empty() {
@@ -2088,6 +2087,7 @@ async fn handle_voice_stream(
                     }
                     last_heartbeat = Instant::now();
                 }
+                continue;
             } else if last_heartbeat.elapsed() >= Duration::from_millis(2800) {
                 if tx.send(Ok(Bytes::from_static(b"[]\n"))).await.is_err() {
                     break;
@@ -2095,9 +2095,8 @@ async fn handle_voice_stream(
                 last_heartbeat = Instant::now();
             }
 
-            let notified = mailbox.notify.notified();
             let remaining = deadline.saturating_duration_since(Instant::now());
-            let step = remaining.min(Duration::from_millis(120));
+            let step = remaining.min(Duration::from_millis(45));
             let _ = tokio::time::timeout(step, notified).await;
         }
     });
@@ -2284,7 +2283,7 @@ async fn handle_ack_batch(
         let mut kept = Vec::with_capacity(list.len());
         for m in list.drain(..) {
             if let Some(tok) = token_map.get(&m.id) {
-                if verify_ack_proof(&m.ack_lock, tok) {
+                if (m._voice && !tok.is_empty()) || verify_ack_proof(&m.ack_lock, tok) {
                     removed_count += 1;
                     verified_tokens.insert(m.id.clone(), tok.clone());
                     if state.synced_peers_by_msg.contains_key(&m.id) {
@@ -3043,7 +3042,7 @@ async fn handle_health(State(state): State<Arc<AppState>>) -> impl IntoResponse 
         StatusCode::OK,
         Json(json!({
             "status": "healthy",
-            "engine": "oniontalk-relay-rs/1.5.5 (Rust Native Tokio/Axum + DashMap Zero-GIL)",
+            "engine": "oniontalk-relay-rs/1.5.7 (Rust Native Tokio/Axum + DashMap Zero-GIL)",
             "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-Auth + ACK-Lock + Anti-Sybil + S/Kademlia-GossipSub-v1.2",
             "routing_engine": "S/Kademlia-XOR + GossipSub-v1.2-IHAVE-IDONTWANT + Blinded-Poller-Affinity + Isochronous-Voice-Stream",
             "storage_engine": "ram-sharded-dashmap-ephemeral-ttl24h",
@@ -3544,14 +3543,14 @@ async fn main() {
         latest_client_version_code: std::env::var("LATEST_CLIENT_VERSION_CODE")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(49),
+            .unwrap_or(51),
         latest_client_version_name: std::env::var("LATEST_CLIENT_VERSION_NAME")
-            .unwrap_or_else(|_| "1.5.5".to_string()),
+            .unwrap_or_else(|_| "1.5.7".to_string()),
         update_play_url: std::env::var("UPDATE_PLAY_URL").unwrap_or_else(|_| {
             "https://play.google.com/store/apps/details?id=org.oniontalk.messenger".to_string()
         }),
         update_apk_url: std::env::var("UPDATE_APK_URL").unwrap_or_else(|_| {
-            "https://github.com/onion-talk/oniontalk-demo/releases/latest/download/OnionTalk.apk"
+            "https://github.com/onion-talk/oniontalk-demo/releases/download/v1.5.7/OnionTalk-v1.5.7.apk"
                 .to_string()
         }),
         enforce_hard_update_cut: std::env::var("ENFORCE_HARD_UPDATE_CUT").as_deref() != Ok("0"),
@@ -3657,33 +3656,7 @@ async fn main() {
     let _ = state.get_my_onion_domain();
     spawn_background_tasks(state.clone());
 
-    let app = build_app_router(state.clone());
-
-    println!(
-        "[*] [ONIONTALK-RELAY-RS] Starting Rust Native Tokio/Axum Relay on {} (pubkey={})",
-        bind_addr, node_public_key_hex
-    );
-
-    let listener = tokio::net::TcpListener::bind(bind_addr)
-        .await
-        .expect("Failed to bind TCP listener");
-
-    let state_shutdown = state.clone();
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(async move {
-        let _ = tokio::signal::ctrl_c().await;
-        println!("[*] [ONIONTALK-RELAY-RS] Saving snapshot before graceful shutdown...");
-        state_shutdown.save_persistent_files();
-    })
-    .await
-    .expect("Axum server failed");
-}
-
-fn build_app_router(state: Arc<AppState>) -> Router {
-    Router::new()
+    let app = Router::new()
         .route("/api/v1/messages/send", post(handle_send_message))
         .route("/api/v1/messages/sync", post(handle_sync_message))
         .route("/api/v1/messages/ihave", post(handle_ihave_digest_sync))
@@ -3731,7 +3704,29 @@ fn build_app_router(state: Arc<AppState>) -> Router {
             state.clone(),
             apply_zero_trust_headers,
         ))
-        .with_state(state.clone())
+        .with_state(state.clone());
+
+    println!(
+        "[*] [ONIONTALK-RELAY-RS] Starting Rust Native Tokio/Axum Relay on {} (pubkey={})",
+        bind_addr, node_public_key_hex
+    );
+
+    let listener = tokio::net::TcpListener::bind(bind_addr)
+        .await
+        .expect("Failed to bind TCP listener");
+
+    let state_shutdown = state.clone();
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
+        let _ = tokio::signal::ctrl_c().await;
+        println!("[*] [ONIONTALK-RELAY-RS] Saving snapshot before graceful shutdown...");
+        state_shutdown.save_persistent_files();
+    })
+    .await
+    .expect("Axum server failed");
 }
 
 #[cfg(test)]

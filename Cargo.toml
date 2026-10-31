@@ -1,6 +1,6 @@
 [package]
 name = "oniontalk-relay-rs"
-version = "1.5.6"
+version = "1.5.7"
 edition = "2021"
 description = "Sovereign Zero-Trust High-Performance Tor v3 Relay Engine for OnionTalk & OnionVoice V1"
 

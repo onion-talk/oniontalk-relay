@@ -92,9 +92,10 @@ RECIPIENT_ID_REGEX = re.compile(r"^@[0-9a-f]{64}(:[a-z2-7]{56}\.onion)?$")
 
 MAX_KNOWN_PEERS = 64
 MAX_INBOX_PER_USER = 500
-MAX_PER_SENDER_INBOX = 50
+MAX_PER_SENDER_INBOX = 150
 MAX_TOTAL_INBOXES = 5000
 MESSAGE_TTL_MS = 24 * 3600 * 1000  # 24 hours
+VOICE_MESSAGE_TTL_MS = 30 * 1000   # 30 seconds for ephemeral real-time voice cells
 AUTH_WINDOW_MS = 5 * 60 * 1000     # +/- 5 minutes replay window
 
 _default_proxy = "socks5h://tor-daemon:9050"
@@ -395,12 +396,36 @@ def _build_auto_update_envelope(recipient_key: str) -> dict | None:
     return _build_system_envelope(recipient_key, _AUTO_UPDATE_TEXT)
 
 
+def _is_retired_system_broadcast_envelope(msg_obj: dict) -> bool:
+    """
+    Identifies retired automatic system broadcast envelopes (_BETA_100_COMMUNITY_TEXT / _AUTO_UPDATE_TEXT)
+    originating from this node or any un-updated remote relay node in the mesh so they are purged
+    from RAM and never replicated or delivered to clients.
+    """
+    sender_raw = (msg_obj.get("sender") or "").strip().lower()
+    if not sender_raw:
+        return False
+    sender_clean = canonical_inbox_key(sender_raw)
+    if sender_clean == canonical_inbox_key(_SYSTEM_SENDER_ID):
+        return True
+    payload = (msg_obj.get("payload") or "").strip()
+    if (
+        payload.startswith("__ENC_X25519_CHACHA20_V2__:")
+        and len(payload) in (1670, 1178)
+        and sender_raw.endswith(":onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion")
+        and not sender_clean.startswith("@bbac48f99ed4536ce9134df16cc49dbed2d9109ed351710d181d86c28f34efd9")
+    ):
+        return True
+    return False
+
+
 def maybe_enqueue_beta100_notice_locked(user_key: str) -> dict | None:
     """
-    Delivers the one-time bilingual (PT-BR + EN) Beta 100-users celebration and
-    crypto payment announcement to every active user on the OnionTalk mesh.
-    Must be called while holding `lock` or `inbox_cond`.
+    Retired automatic Beta-100 broadcast hook (disabled by default to prevent multi-node/container
+    restart repeat delivery). Only active if ENABLE_BETA100_BROADCAST=1 is explicitly set.
     """
+    if os.getenv("ENABLE_BETA100_BROADCAST", "0") != "1":
+        return None
     if not user_key or user_key == canonical_inbox_key(_SYSTEM_SENDER_ID):
         return None
     if user_key in beta100_notified_users:
@@ -422,10 +447,10 @@ def maybe_enqueue_beta100_notice_locked(user_key: str) -> dict | None:
 
 def maybe_enqueue_auto_update_notice_locked(user_key: str, cooldown_sec: int = 21600) -> dict | None:
     """
-    If the polling/sending client has not reported X-Client-Version-Code >= MIN_CLIENT_VERSION_CODE,
-    automatically injects an E2EE v2 update notification into their inbox (max once per cooldown_sec).
-    Must be called while holding `lock` or `inbox_cond`.
+    Retired automatic update inbox injection hook (disabled by default unless ENABLE_AUTO_UPDATE_BROADCAST=1).
     """
+    if os.getenv("ENABLE_AUTO_UPDATE_BROADCAST", "0") != "1":
+        return None
     raw_vc = (request.headers.get("X-Client-Version-Code") or "").strip()
     try:
         client_vc = int(raw_vc) if raw_vc else 0
@@ -770,6 +795,8 @@ mesh_watch_events = _load_mesh_watch_events()
 peer_origin_hints: dict[str, tuple[str, float]] = {}
 # Maps blinded_affinity_tag (24-hex SHA256) -> monotonic_ts of local Long-Poll client
 local_active_pollers: dict[str, float] = {}
+# Maps blinded_affinity_tag (24-hex SHA256) -> monotonic_ts of active real-time voice stream poller
+local_voice_stream_pollers: dict[str, float] = {}
 
 my_onion_domain = None
 lock = threading.Lock()
@@ -1127,6 +1154,11 @@ def prune_expired_messages_locked():
         kept = []
         for m in msgs:
             mid = m.get("id")
+            if _is_retired_system_broadcast_envelope(m):
+                if mid:
+                    acked_tombstones[mid] = now_ms
+                    synced_peers_by_msg.pop(mid, None)
+                continue
             if mid and mid in acked_tombstones:
                 synced_peers_by_msg.pop(mid, None)
                 continue
@@ -1135,7 +1167,8 @@ def prune_expired_messages_locked():
             except (ValueError, TypeError, OverflowError):
                 continue
             age_ms = now_ms - min(ts, now_ms)
-            if 0 <= age_ms < MESSAGE_TTL_MS and ts <= (now_ms + AUTH_WINDOW_MS):
+            effective_ttl_ms = VOICE_MESSAGE_TTL_MS if m.get("_voice") else MESSAGE_TTL_MS
+            if 0 <= age_ms < effective_ttl_ms and ts <= (now_ms + AUTH_WINDOW_MS):
                 kept.append(m)
                 if mid:
                     active_msg_ids.add(mid)
@@ -1152,11 +1185,16 @@ def prune_expired_messages_locked():
 def enqueue_message_locked(recipient: str, msg_obj: dict) -> tuple[bool, str]:
     """
     Enqueues an encrypted envelope with strict per-sender, per-user, and global quotas.
-    Never evicts unread messages via FIFO when full (R7 + WB-01 fix); rejects excess traffic instead.
+    Never evicts unread chat messages via FIFO when full (R7 + WB-01 fix); for ephemeral _voice frames,
+    evicts only the oldest stale _voice frame from the same sender if quota is reached.
     """
     prune_expired_messages_locked()
     recipient_key = canonical_inbox_key(recipient)
     msg_id = msg_obj.get("id")
+    if _is_retired_system_broadcast_envelope(msg_obj):
+        if msg_id:
+            acked_tombstones[msg_id] = int(time.time() * 1000)
+        return False, "already_acked"
     if msg_id and msg_id in acked_tombstones:
         return False, "already_acked"
 
@@ -1175,7 +1213,15 @@ def enqueue_message_locked(recipient: str, msg_obj: dict) -> tuple[bool, str]:
             if canonical_inbox_key(m.get("sender") or "") == sender_id
         )
         if sender_count >= MAX_PER_SENDER_INBOX:
-            return False, "sender_quota_exceeded"
+            if msg_obj.get("_voice"):
+                for idx, existing in enumerate(inbox[recipient_key]):
+                    if existing.get("_voice") and canonical_inbox_key(existing.get("sender") or "") == sender_id:
+                        inbox[recipient_key].pop(idx)
+                        break
+                else:
+                    return False, "sender_quota_exceeded"
+            else:
+                return False, "sender_quota_exceeded"
 
     if len(inbox[recipient_key]) >= MAX_INBOX_PER_USER:
         return False, "user_quota_exceeded"
@@ -1605,6 +1651,7 @@ def send_message():
     if not msg_id:
         return jsonify({"error": "Invalid message id"}), 400
 
+    is_voice_stream = (request.headers.get("X-Onion-Voice-Stream") or "").strip() == "1"
     stored_msg = {
         "id": msg_id,
         "sender": sender,
@@ -1613,15 +1660,29 @@ def send_message():
         "ack_lock": ack_lock,
         "timestamp": safe_ts,
     }
+    if is_voice_stream:
+        stored_msg["_voice"] = True
 
     sender_tag = _blind_affinity_tag(sender)
+    recipient_tag = _blind_affinity_tag(recipient)
     with lock:
         stats_counters["messages_received"] += 1
+        now_mono = time.monotonic()
         if sender_tag:
-            local_active_pollers[sender_tag] = time.monotonic()
+            local_active_pollers[sender_tag] = now_mono
+        recipient_voice_polling_locally = bool(
+            recipient_tag and (now_mono - local_voice_stream_pollers.get(recipient_tag, 0.0)) < 15.0
+        )
+        effective_voice_cell = is_voice_stream or (recipient_voice_polling_locally and 400 <= len(payload) <= 16384)
+        if effective_voice_cell:
+            stored_msg["_voice"] = True
         added, reason = enqueue_message_locked(recipient, stored_msg)
-        auto_env = maybe_enqueue_auto_update_notice_locked(canonical_inbox_key(sender), cooldown_sec=7200)
-        beta_env = maybe_enqueue_beta100_notice_locked(canonical_inbox_key(sender))
+        if not effective_voice_cell:
+            auto_env = maybe_enqueue_auto_update_notice_locked(canonical_inbox_key(sender), cooldown_sec=7200)
+            beta_env = maybe_enqueue_beta100_notice_locked(canonical_inbox_key(sender))
+        else:
+            auto_env = None
+            beta_env = None
 
     if auto_env is not None:
         threading.Thread(target=broadcast_message_to_peers, args=(auto_env,), daemon=True).start()
@@ -1635,7 +1696,11 @@ def send_message():
 
     # Zero-metadata logging (R4 fix: never print recipient, sender, or msg_id)
     print("[*] [RELAY-STORED] E2E encrypted envelope queued with verified Ed25519 signature & ack_lock", flush=True)
-    threading.Thread(target=broadcast_message_to_peers, args=(stored_msg,), daemon=True).start()
+    # Ephemeral real-time voice cells (X-Onion-Voice-Stream: 1) or voice cells to an active local voice poller
+    # are consumed in <400ms via local Single-Rendezvous; never flood 34 remote .onion peers with 120ms voice gossip!
+    if not effective_voice_cell:
+        gossip_copy = {k: v for k, v in stored_msg.items() if k not in ("_claim_until", "_voice")}
+        threading.Thread(target=broadcast_message_to_peers, args=(gossip_copy,), daemon=True).start()
 
     return jsonify({"status": "ok", "messageId": msg_id}), 200
 
@@ -1893,20 +1958,88 @@ def get_inbox():
     except (ValueError, TypeError):
         wait_sec = 0.0
 
+    is_voice_stream = (request.headers.get("X-Onion-Voice-Stream") or "").strip() == "1"
+    raw_ack_batch = (request.headers.get("X-Onion-Ack-Batch") or "").strip()
+    piggyback_tokens = {}
+    if raw_ack_batch:
+        for pair in raw_ack_batch.split(",")[:64]:
+            if ":" in pair:
+                mid, tok = pair.split(":", 1)
+                mid = mid.strip()
+                tok = tok.strip()
+                if mid and tok:
+                    piggyback_tokens[mid] = tok
+
     user_key = canonical_inbox_key(user)
     user_tag = _blind_affinity_tag(user_key)
     woke_from_wait = False
     auto_env = None
     beta_env = None
+    acked_ids_list = []
+    verified_piggyback_tokens = {}
+
+    def _claim_deliverable_messages_locked() -> list:
+        raw_list = inbox.get(user_key, [])
+        if not raw_list:
+            return []
+        if not is_voice_stream:
+            return [{k: v for k, v in m.items() if k not in ("_claim_until", "_voice")} for m in raw_list]
+        now_mono = time.monotonic()
+        claimed = []
+        for m in raw_list:
+            if m.get("_claim_until", 0.0) <= now_mono:
+                m["_claim_until"] = now_mono + 4.5
+                claimed.append({k: v for k, v in m.items() if k not in ("_claim_until", "_voice")})
+        return claimed
+
+    peer_ack_tokens = {}
     with inbox_cond:
         if user_tag:
-            local_active_pollers[user_tag] = time.monotonic()
+            now_mono_poll = time.monotonic()
+            local_active_pollers[user_tag] = now_mono_poll
+            if is_voice_stream and wait_sec <= 2.5:
+                local_voice_stream_pollers[user_tag] = now_mono_poll
             peer_origin_hints.pop(user_tag, None)
             _record_client_tag_locked(user_tag)
+        if piggyback_tokens:
+            now_ms = int(time.time() * 1000)
+            remaining_ids_in_inbox = set()
+            if user_key in inbox:
+                kept = []
+                for m in inbox[user_key]:
+                    mid = m.get("id")
+                    if mid in piggyback_tokens:
+                        if verify_ack_proof(m, piggyback_tokens[mid]):
+                            acked_ids_list.append(mid)
+                            verified_piggyback_tokens[mid] = piggyback_tokens[mid]
+                            if mid in synced_peers_by_msg:
+                                peer_ack_tokens[mid] = piggyback_tokens[mid]
+                            acked_tombstones[mid] = now_ms
+                            acked_tokens[mid] = piggyback_tokens[mid]
+                            stats_counters["acks_processed"] += 1
+                        else:
+                            stats_counters["spoofed_acks_blocked"] += 1
+                            kept.append(m)
+                            if mid:
+                                remaining_ids_in_inbox.add(mid)
+                    else:
+                        kept.append(m)
+                        if mid:
+                            remaining_ids_in_inbox.add(mid)
+                inbox[user_key] = kept
+            for mid, tok in piggyback_tokens.items():
+                if mid not in remaining_ids_in_inbox and mid not in acked_ids_list:
+                    acked_ids_list.append(mid)
+                saved_tok = acked_tokens.get(mid, "")
+                if mid in acked_tombstones and mid not in verified_piggyback_tokens and saved_tok and hmac.compare_digest(tok, saved_tok):
+                    verified_piggyback_tokens[mid] = saved_tok
+                    if mid in synced_peers_by_msg:
+                        peer_ack_tokens[mid] = saved_tok
         prune_expired_messages_locked()
-        auto_env = maybe_enqueue_auto_update_notice_locked(user_key, cooldown_sec=21600)
-        beta_env = maybe_enqueue_beta100_notice_locked(user_key)
-        messages = list(inbox.get(user_key, []))
+        if not is_voice_stream:
+            auto_env = maybe_enqueue_auto_update_notice_locked(user_key, cooldown_sec=21600)
+            beta_env = maybe_enqueue_beta100_notice_locked(user_key)
+        messages = _claim_deliverable_messages_locked()
         if not messages and wait_sec > 0.0:
             deadline = time.monotonic() + wait_sec
             while not messages:
@@ -1914,21 +2047,28 @@ def get_inbox():
                 if remaining <= 0.0:
                     break
                 inbox_cond.wait(timeout=remaining)
-                messages = list(inbox.get(user_key, []))
+                messages = _claim_deliverable_messages_locked()
                 if messages:
                     woke_from_wait = True
                     break
 
+    if peer_ack_tokens:
+        threading.Thread(target=broadcast_ack_batch_to_peers, args=(user, peer_ack_tokens), daemon=True).start()
     if auto_env is not None:
         threading.Thread(target=broadcast_message_to_peers, args=(auto_env,), daemon=True).start()
     if beta_env is not None:
         threading.Thread(target=broadcast_message_to_peers, args=(beta_env,), daemon=True).start()
 
-    # OpSec micro-jitter (5ms-15ms) on Long-Poll wake to decorrelate sub-millisecond timing analysis
-    if woke_from_wait:
+    # OpSec micro-jitter (5ms-15ms) on non-voice Long-Poll wake to decorrelate timing analysis;
+    # bypassed during active CBR voice stream (already Constant-Bitrate 484B cells) for 0ms wake latency.
+    if woke_from_wait and not is_voice_stream:
         time.sleep(random.uniform(0.005, 0.015))
 
-    return jsonify(messages), 200
+    resp = jsonify(messages)
+    resp.headers["X-Onion-Voice-Claim"] = "1"
+    if acked_ids_list:
+        resp.headers["X-Onion-Acked-Ids"] = ",".join(acked_ids_list)
+    return resp, 200
 
 
 @app.route('/api/v1/messages/ack', methods=['POST'])
@@ -1949,6 +2089,7 @@ def acknowledge_message():
 
     user_key = canonical_inbox_key(user)
     removed = False
+    should_broadcast_ack = False
     now_ms = int(time.time() * 1000)
     with lock:
         if user_key in inbox:
@@ -1957,6 +2098,8 @@ def acknowledge_message():
                 if m.get("id") == msg_id:
                     if verify_ack_proof(m, ack_token):
                         removed = True
+                        if msg_id in synced_peers_by_msg:
+                            should_broadcast_ack = True
                         acked_tombstones[msg_id] = now_ms
                         acked_tokens[msg_id] = ack_token
                         stats_counters["acks_processed"] += 1
@@ -1971,8 +2114,10 @@ def acknowledge_message():
                 print("[*] [RELAY-ACK] Envelope purged with valid cryptographic preimage proof", flush=True)
         elif msg_id in acked_tombstones:
             removed = True
+            if msg_id in synced_peers_by_msg:
+                should_broadcast_ack = True
 
-    if removed:
+    if should_broadcast_ack:
         threading.Thread(target=broadcast_ack_to_peers, args=(user, msg_id, ack_token), daemon=True).start()
 
     return jsonify({"status": "ack_ok", "removed": removed}), 200
@@ -2007,6 +2152,7 @@ def acknowledge_messages_batch():
     user_key = canonical_inbox_key(user)
     removed_count = 0
     verified_tokens = {}
+    peer_verified_tokens = {}
     now_ms = int(time.time() * 1000)
     with lock:
         if user_key in inbox:
@@ -2017,6 +2163,8 @@ def acknowledge_messages_batch():
                     if verify_ack_proof(m, token_map[mid]):
                         removed_count += 1
                         verified_tokens[mid] = token_map[mid]
+                        if mid in synced_peers_by_msg:
+                            peer_verified_tokens[mid] = token_map[mid]
                         acked_tombstones[mid] = now_ms
                         acked_tokens[mid] = token_map[mid]
                         stats_counters["acks_processed"] += 1
@@ -2033,9 +2181,11 @@ def acknowledge_messages_batch():
             saved_tok = acked_tokens.get(mid, "")
             if mid in acked_tombstones and mid not in verified_tokens and saved_tok and hmac.compare_digest(tok, saved_tok):
                 verified_tokens[mid] = saved_tok
+                if mid in synced_peers_by_msg:
+                    peer_verified_tokens[mid] = saved_tok
 
-    if verified_tokens:
-        threading.Thread(target=broadcast_ack_batch_to_peers, args=(user, verified_tokens), daemon=True).start()
+    if peer_verified_tokens:
+        threading.Thread(target=broadcast_ack_batch_to_peers, args=(user, peer_verified_tokens), daemon=True).start()
     return jsonify({"status": "ack_batch_ok", "removed": removed_count}), 200
 
 

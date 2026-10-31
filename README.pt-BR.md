@@ -39,12 +39,12 @@ Você só precisa ter instalado na máquina:
 
 ---
 
-## 🚀 What's New in `v1.5.0` (`versionCode = 36` / Build 36) & Relay Node `v1.5.0` (`Build 10`) & Mesh `v=31` — Post-Quantum Hybrid Encryption (`ML-KEM-768`), Dual Warm Socket Pool (~1.13s E2E), S/Kademlia XOR Routing & GossipSub v1.2
+## 🚀 What's New in `v1.5.4` (`versionCode = 48` / Build 48) & Relay Node `v1.5.2` (`Build 11`) & Mesh `v=31` — Post-Quantum Hybrid Encryption (`ML-KEM-768`), Dual Warm Socket Pool (~1.13s E2E), S/Kademlia XOR Routing & GossipSub v1.2
 
-- **📦 Direct Signed APK Downloads (`v1.5.0` — Latest Release Build 36)**:
-  - **Main Messenger APK (`org.oniontalk.messenger` `v1.5.0` Build 36)**: [**Download `OnionTalk-v1.5.0.apk`**](https://github.com/onion-talk/oniontalk-demo/releases/download/v1.4.4-demo/OnionTalk-v1.4.4.apk) (`SHA-256: 4a5472a26444cbfdad7ed5dbab76e1e88ab64824d18df95694e6cd741a66dc6f`)
-  - **Standalone Android Relay Node APK (`org.oniontalk.relaynode` `v1.5.0` Build 10)**: [**Download `OnionTalk-RelayNode-v1.4.3.apk`**](https://github.com/onion-talk/oniontalk-demo/releases/download/v1.4.4-demo/OnionTalk-RelayNode-v1.4.3.apk) (`SHA-256: f03069d9c8788a18224bb15327d547c40c55d2ee224d962fbb9eddde087666b0`)
-- **🛡️ Key Cryptographic & P2P Mesh Breakthroughs in `v1.5.0` (`Build 36`)**:
+- **📦 Direct Signed APK Downloads (`v1.5.4` — Latest Release Build 48)**:
+  - **Main Messenger APK (`org.oniontalk.messenger` `v1.5.4` Build 48)**: [**Download `OnionTalk-v1.5.4.apk`**](https://github.com/onion-talk/oniontalk-demo/releases/download/v1.5.4/OnionTalk-v1.5.4.apk) (`SHA-256: 91c089e10a8ca1ab0326b87d66fff9e29d90797c03921d4e5bfc586d9b86c34a`)
+  - **Standalone Android Relay Node APK (`org.oniontalk.relaynode` `v1.5.2` Build 11)**: [**Download `OnionTalk-RelayNode-v1.4.3.apk`**](https://github.com/onion-talk/oniontalk-demo/releases/download/v1.4.4-demo/OnionTalk-RelayNode-v1.4.3.apk) (`SHA-256: f03069d9c8788a18224bb15327d547c40c55d2ee224d962fbb9eddde087666b0`)
+- **🛡️ Key Cryptographic & P2P Mesh Breakthroughs in `v1.5.4` (`Build 48`)**:
   1. **Hybrid Post-Quantum Cryptography (`__ENC_PQC_KYBER768_X25519_V3__`)**: Combines classical **Dual X25519 ECDH** with **NIST FIPS 203 ML-KEM-768 (`Kyber-768`)** key encapsulation via `HKDF-SHA256` + `ChaCha20-Poly1305 AEAD` + `Ed25519` outer envelope signatures to protect against *Harvest Now, Decrypt Later* quantum adversaries.
   2. **Ultra-Fast E2E Delivery (`1.139s – 1.244s`, avg `1.20s`)**: Upgraded **Dual Warm Socket Pool** (`minWarmSockets = 2` per `.onion` gateway, `70s/75s` Keep-Alive) achieving **100% pre-warmed Tor circuit reuse (`0ms` SOCKS5 handshake)** alongside a `250ms` speculative *Hedged Send*.
   3. **S/Kademlia XOR Distance Routing & Blinded Poller Affinity (`v=27`)**: All 20 global `.onion` v3 relays (`v=31`) now route by XOR distance (`SHA-256(peer_onion) ^ SHA-256(recipient_hash)`) with zero-knowledge RAM-only rendezvous affinity (`active_pollers`, `TTL 90s`, zero logs).

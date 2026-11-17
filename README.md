@@ -18,16 +18,16 @@
 
 ---
 
-## 🚀 What's New in `v1.7.2` (`versionCode = 68` / Build 68) & Relay Node `v1.7.2` (`Build 21`) & Mesh `v=32` — Zero-Leak Instant Invite Deep-Links (`#fragment`), 1 Free 50-Member PQC Group Campaign, Listen-Once (`1x`) HD Voice & 35-Node Zero-SPOF Mesh (`STRIX 28/28`)
+## 🚀 What's New in `v1.7.4` (`versionCode = 70` / Build 70) & Relay Node `v1.7.4` (`Build 23`) & Mesh `v=32` — Zero-RTT Audio/Message Unlock Staging, UI-First Anti-Race Ordering, Unified Onion Mesh Group Sheet & 1 Free 50-Member PQC Group (`STRIX 30/30`)
 
-- **📦 Official Google Play Open Beta, Direct Signed APK Downloads & Web Container (`v1.7.2` — Build 68)**:
+- **📦 Official Google Play Open Beta, Direct Signed APK Downloads & Web Container (`v1.7.4` — Build 70)**:
   - **▶️ Google Play Store (Official Open Beta)**: [**OnionTalk – Apps no Google Play**](https://play.google.com/store/apps/details?id=org.oniontalk.messenger)
   - **🌐 Official Website & Privacy Policy**: [**https://oniontalk.co/**](https://oniontalk.co/)
-  - **Main Messenger APK (`org.oniontalk.messenger` `v1.7.2` Build 68)**: [**Download `OnionTalk.apk` (latest)**](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/OnionTalk.apk) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/SHA256SUMS.txt))
-  - **Standalone Android Relay Node APK (`org.oniontalk.relaynode` `v1.7.2` Build 21)**: [**Download `OnionTalk-RelayNode.apk` (latest)**](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/OnionTalk-RelayNode.apk) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/SHA256SUMS.txt))
+  - **Main Messenger APK (`org.oniontalk.messenger` `v1.7.4` Build 70)**: [**Download `OnionTalk.apk` (latest)**](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/OnionTalk.apk) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/SHA256SUMS.txt))
+  - **Standalone Android Relay Node APK (`org.oniontalk.relaynode` `v1.7.4` Build 23)**: [**Download `OnionTalk-RelayNode.apk` (latest)**](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/OnionTalk-RelayNode.apk) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/SHA256SUMS.txt))
   - **🐳 Desktop & Web Container + Embedded Tor v3 Relay (`Windows / Linux / macOS`)**: [**`eriktonon/oniontalk-web:latest`**](https://hub.docker.com/r/eriktonon/oniontalk-web) ![Docker tag](https://img.shields.io/docker/v/eriktonon/oniontalk-web?sort=semver&label=tag&style=flat-square) — Self-contained Rust Black-Box Web Messenger + active Tor v3 Hidden Service Relay listening on `127.0.0.1:8420`.
 
-- **🛡️ Key Cryptographic & P2P Mesh Breakthroughs in `v1.7.2` (`Build 68` & Relay `Build 21`)**:
+- **🛡️ Key Cryptographic & P2P Mesh Breakthroughs in `v1.7.4` (`Build 70` & Relay `Build 23` • `STRIX 30/30`)**:
   1. **Sovereign Post-Quantum Encrypted Groups (`PQC Groups`) & Anti-Spam Proof-of-Community**: End-to-end encrypted multi-party group chats over Tor v3 with zero central member servers. Group creation unlocks automatically via organic local proof-of-community (`3+ mutual contacts` + `5+ days of vault maturity`, evaluated 100% locally) or immediately via an offline `Ed25519`-signed **`FounderPass`** certificate granted to community Relay Node Operators (`2+ hours active uptime`) or voluntary crypto supporters.
   2. **In-RAM Image Blur & Pixelation Studio + Zero-EXIF Sanitizer**: Built-in tactile brush editor (`Gaussian Blur` & `Mosaic Pixelate`) operating strictly in volatile RAM before encryption, combined with 100% EXIF/GPS header stripping and Least Significant Bit (`LSB`) anti-fingerprinting jitter.
   3. **Hybrid Post-Quantum Cryptography (`__ENC_PQC_KYBER768_X25519_V3__`)**: Combines classical **Dual X25519 ECDH** with **NIST FIPS 203 ML-KEM-768 (`Kyber-768`)** key encapsulation via `HKDF-SHA256` + `ChaCha20-Poly1305 AEAD` + `Ed25519` outer envelope signatures to protect against *Harvest Now, Decrypt Later* quantum adversaries.

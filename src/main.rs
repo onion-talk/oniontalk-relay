@@ -3043,7 +3043,7 @@ async fn handle_health(State(state): State<Arc<AppState>>) -> impl IntoResponse 
         StatusCode::OK,
         Json(json!({
             "status": "healthy",
-            "engine": "oniontalk-relay-rs/1.7.4 (Rust Native Tokio/Axum + DashMap Zero-GIL)",
+            "engine": "oniontalk-relay-rs/1.7.5 (Rust Native Tokio/Axum + DashMap Zero-GIL)",
             "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-Auth + ACK-Lock + Anti-Sybil + S/Kademlia-GossipSub-v1.2",
             "routing_engine": "S/Kademlia-XOR + GossipSub-v1.2-IHAVE-IDONTWANT + Blinded-Poller-Affinity + Isochronous-Voice-Stream",
             "storage_engine": "ram-sharded-dashmap-ephemeral-ttl24h",
@@ -3544,9 +3544,9 @@ async fn main() {
         latest_client_version_code: std::env::var("LATEST_CLIENT_VERSION_CODE")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(70),
+            .unwrap_or(71),
         latest_client_version_name: std::env::var("LATEST_CLIENT_VERSION_NAME")
-            .unwrap_or_else(|_| "1.7.4".to_string()),
+            .unwrap_or_else(|_| "1.7.5".to_string()),
         update_play_url: std::env::var("UPDATE_PLAY_URL").unwrap_or_else(|_| {
             "https://play.google.com/store/apps/details?id=org.oniontalk.messenger".to_string()
         }),

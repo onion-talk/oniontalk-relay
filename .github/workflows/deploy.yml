@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   strix-relay-rust-gate:
-    name: "🦀 Strix Relay Rust Native Zero-Leak, Docs & Protocol Gate"
+    name: "🦀 Strix Relay Rust Native Zero-Leak & Protocol Gate"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

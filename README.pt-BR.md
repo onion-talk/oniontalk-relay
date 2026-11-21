@@ -44,17 +44,18 @@ Você só precisa ter instalado na máquina:
 
 ---
 
-## 🚀 Novidades da `v1.8.0` (`versionCode = 73` / Build 73) & Relay Node `v1.8.0` (`Build 26`) & Malha `v=32` — Zero-RTT Audio/Message Unlock Staging, UI-First Anti-Race, Grupos PQC (1 Grátis até 50) & Malha 35 Nós (`STRIX 40/40`)
+## 🚀 Release Oficial Atual & Malha Soberana em Rust — `ENVELOPE_V3` Pós-Quântico, Container Non-Root `UID 10014` & Malha Global Tor v3
 
-- **📦 Downloads Diretos Assinados (`v1.8.0` — Latest Release Build 73)**:
-  - **Main Messenger APK (`org.oniontalk.messenger` `v1.8.0` Build 73)**: [**Download `OnionTalk.apk` (latest)**](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/OnionTalk.apk) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/SHA256SUMS.txt))
-  - **Standalone Android Relay Node APK (`org.oniontalk.relaynode` `v1.8.0` Build 26)**: [**Download `OnionTalk-RelayNode.apk` (latest)**](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/OnionTalk-RelayNode.apk) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/SHA256SUMS.txt))
-- **🛡️ Key Cryptographic & P2P Mesh Breakthroughs in `v1.8.0` (`Build 73` & Relay `Build 26` • `STRIX 40/40`)**:
-  1. **Hybrid Post-Quantum Cryptography (`__ENC_PQC_KYBER768_X25519_V3__`)**: Combines classical **Dual X25519 ECDH** with **NIST FIPS 203 ML-KEM-768 (`Kyber-768`)** key encapsulation via `HKDF-SHA256` + `ChaCha20-Poly1305 AEAD` + `Ed25519` outer envelope signatures to protect against *Harvest Now, Decrypt Later* quantum adversaries.
-  2. **Ultra-Fast E2E Delivery (`1.139s – 1.244s`, avg `1.20s`)**: Upgraded **Dual Warm Socket Pool** (`minWarmSockets = 2` per `.onion` gateway, `70s/75s` Keep-Alive) achieving **100% pre-warmed Tor circuit reuse (`0ms` SOCKS5 handshake)** alongside a `250ms` speculative *Hedged Send*.
-  3. **S/Kademlia XOR Distance Routing & Blinded Poller Affinity (`v=27`)**: All 20 global `.onion` v3 relays (`v=31`) now route by XOR distance (`SHA-256(peer_onion) ^ SHA-256(recipient_hash)`) with zero-knowledge RAM-only rendezvous affinity (`active_pollers`, `TTL 90s`, zero logs).
-  4. **GossipSub v1.2 `IHAVE` / `IDONTWANT` Deduplication**: Relays announce `POST /gossip/ihave` metadata before forwarding payloads `> 1024 bytes`, cutting redundant Tor mesh bandwidth by **~70%**.
-  5. **Continuous `10s–12s` Long-Polling & Mandatory `SHA-256` Media Integrity**: Eliminates dead intervals between poll cycles and verifies `SHA-256` Merkle hashes on all voice notes, images, and attachments prior to rendering.
+- **📦 Downloads Diretos Assinados & Imagens Oficiais (Sempre Sincronizados na Última Release)**:
+  - **Main Messenger APK (`org.oniontalk.messenger`)**: [**Download `OnionTalk.apk` (latest)**](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/OnionTalk.apk) ![Latest Messenger Release](https://img.shields.io/github/v/release/onion-talk/oniontalk-demo?style=flat-square&label=release&color=00E5FF) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/SHA256SUMS.txt))
+  - **Standalone Android Relay Node APK (`org.oniontalk.relaynode`)**: [**Download `OnionTalk-RelayNode.apk` (latest)**](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/OnionTalk-RelayNode.apk) ![Latest Relay Release](https://img.shields.io/github/v/release/onion-talk/oniontalk-relay?style=flat-square&label=release&color=00E676) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/SHA256SUMS.txt))
+  - **🦀 Container Oficial Relay Rust (`oniontalk-relay-rs`)**: [**`eriktonon/oniontalk:latest`**](https://hub.docker.com/r/eriktonon/oniontalk) ![Docker tag](https://img.shields.io/docker/v/eriktonon/oniontalk?sort=semver&label=tag&style=flat-square) (`UID 10014` non-root, `--cap-drop=ALL`, `tini`, `IntroDoS`).
+- **🛡️ Pilares Criptográficos & Roteamento P2P (`ENVELOPE_V3` • Hybrid PQC • Zero-Leak CI Verified)**:
+  1. **Hybrid Post-Quantum Cryptography (`__ENC_PQC_KYBER768_X25519_V3__` / `ENVELOPE_V3`)**: Combina **Dual X25519 ECDH** com **NIST FIPS 203 ML-KEM-768 (`Kyber-768`)** via `HKDF-SHA256` + `ChaCha20-Poly1305 AEAD` + assinaturas `Ed25519` com vínculo autenticado de `ack_lock` e proteção anti-replay.
+  2. **Ultra-Fast E2E Delivery (`1.13s – 1.24s`)**: **Dual Warm Socket Pool** (`minWarmSockets = 2` por gateway `.onion`, `0ms` de handshake SOCKS5) aliado a *Hedged Send* especulativo em `250ms`.
+  3. **S/Kademlia XOR Distance Routing & Blinded Poller Affinity**: Os nós `.onion` v3 da malha global roteiam por distância XOR (`SHA-256(peer_onion) ^ SHA-256(recipient_hash)`) com afinidade cega em RAM (`active_pollers`, `TTL 90s`, zero logs).
+  4. **GossipSub v1.2 `IHAVE` / `IDONTWANT` Deduplication**: Os relays anunciam metadados `POST /gossip/ihave` antes de encaminhar payloads `> 1024 bytes`, reduzindo o tráfego redundante na malha Tor em **~70%**.
+  5. **Continuous `10s–12s` Long-Polling & Mandatory `SHA-256` Media Integrity**: Elimina janelas mortas entre ciclos de escuta e verifica hashes Merkle `SHA-256` em áudios, imagens e anexos antes da renderização.
 
 ---
 ## 🚀 Passo a Passo: Subindo seu Servidor (1 Comando)
@@ -163,7 +164,7 @@ A chave privada do endereço `.onion` do seu servidor fica salva automaticamente
 
 ---
 
-## ⚠️ Legal Disclaimers, Limitation of Liability & Sovereign Terms of Use (`v1.5.0`)
+## ⚠️ Legal Disclaimers, Limitation of Liability & Sovereign Terms of Use
 
 1. **"AS IS" Open-Source Provision & Cryptographic Research Purpose**: OnionTalk (`org.oniontalk.messenger`), OnionTalk Relay Node (`org.oniontalk.relaynode`), and the Desktop/Web Container (`oniontalk-web`) are distributed strictly **"AS IS"**, without warranties of any kind under the MIT License, as cryptographic engineering and digital privacy technology (`Privacy by Design`).
 2. **Irreversible Zero-Knowledge Custody (No Password Recovery)**: Because OnionTalk operates without central servers, user accounts, emails, or phone numbers, **the developers cannot recover forgotten vault passwords, restore lost private keys, or reverse the 5-Strike Anti-Coercion Wipe (`DoD 5220.22-M`) or Synchronized Bilateral Burn (`🔥`)**. Users are solely responsible for safeguarding their local credentials and backups.

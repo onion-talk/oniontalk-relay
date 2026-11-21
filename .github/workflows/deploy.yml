@@ -15,12 +15,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  RELAY_VERSION_TAG: v1.5.7
-
 jobs:
   strix-relay-rust-gate:
-    name: "🦀 Strix Relay Rust Native Zero-Leak & Protocol Gate"
+    name: "🦀 Strix Relay Rust Native Zero-Leak, Docs & Protocol Gate"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -28,6 +25,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      - name: Run Mandatory Zero-Leak & Dynamic Release Docs Gate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 scripts/zero_leak_scanner.py
+          python3 scripts/verify_release_docs.py
 
       - name: Install Rust Stable Toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -54,14 +58,20 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Hardened Rust Relay Image & Verify Binary
+      - name: Resolve Crate Version Dynamically & Build Hardened Non-Root Relay Image
         run: |
+          VER=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          if [ -z "$VER" ]; then
+            echo "[FATAL] Could not parse version from Cargo.toml"
+            exit 1
+          fi
+          echo "RELAY_VER=${VER}" >> "$GITHUB_ENV"
           docker build \
-            -t eriktonon/oniontalk:${RELAY_VERSION_TAG} \
-            -t eriktonon/oniontalk:v1.5.6 \
-            -t eriktonon/oniontalk:latest \
+            -t "eriktonon/oniontalk:${VER}" \
+            -t "eriktonon/oniontalk:v${VER}" \
+            -t "eriktonon/oniontalk:latest" \
             .
-          docker run --rm --entrypoint /bin/sh eriktonon/oniontalk:${RELAY_VERSION_TAG} -c "test -x /usr/local/bin/oniontalk-relay-rs && echo '[OK] Rust Native Relay Binary Verified'"
+          docker run --rm --entrypoint /bin/sh "eriktonon/oniontalk:${VER}" -c 'test "$(id -u)" = "10014" && test -x /usr/local/bin/oniontalk-relay-rs && echo "[OK] Non-Root UID 10014 Rust Native Relay Binary Verified ($VER)"'
 
       - name: Push Verified Relay Images to Docker Hub
         if: ${{ github.event_name != 'pull_request' }}
@@ -71,9 +81,9 @@ jobs:
         run: |
           if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
             echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-            docker push eriktonon/oniontalk:${RELAY_VERSION_TAG}
-            docker push eriktonon/oniontalk:v1.5.6
-            docker push eriktonon/oniontalk:latest
+            docker push "eriktonon/oniontalk:${RELAY_VER}"
+            docker push "eriktonon/oniontalk:v${RELAY_VER}"
+            docker push "eriktonon/oniontalk:latest"
           else
             echo "[INFO] DOCKERHUB secrets not configured; skipping remote registry push."
           fi

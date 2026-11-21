@@ -3,7 +3,7 @@ stages:
 
 strix_relay_rust_gate:
   stage: security_test
-  image: rust:1.85-slim-bookworm
+  image: rust:slim-bookworm
   script:
     - apt-get update && apt-get install -y --no-install-recommends git pkg-config libssl-dev ca-certificates
     - cargo test --release --locked -- --nocapture

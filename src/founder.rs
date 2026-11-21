@@ -78,6 +78,106 @@ pub fn build_local_node_claim_voucher(state: &AppState) -> String {
     )
 }
 
+pub const TRUSTED_NODE_CERT_ISSUERS: &[&str] = &[
+    OFFICIAL_ADMIN_PUBKEY_HEX,
+    "f264b56baf2938e6c19103d932bafc0c45ab0b73af472d222355c3d4bb0f941f", // Master BR-Master
+    "95e679efef897cb46eff5da9de5622eb03624b98985bfaa21363c96f743acdd2", // Worker BR-Worker
+];
+
+pub fn issue_signed_node_certificate(
+    state: &AppState,
+    node_onion: &str,
+    node_pubkey_hex: &str,
+    provider_group: &str,
+    expires_epoch_sec: i64,
+) -> String {
+    let clean_onion = node_onion.trim().to_ascii_lowercase();
+    let clean_pub = node_pubkey_hex.trim().to_ascii_lowercase();
+    let clean_prov = provider_group.trim().to_ascii_uppercase().replace(':', "_");
+    let prov = if clean_prov.is_empty() {
+        "COMMUNITY"
+    } else {
+        clean_prov.as_str()
+    };
+    let canonical = format!(
+        "ONIONTALK_NODE_CERT_V1|{}|{}|{}|{}|{}",
+        clean_onion, clean_pub, prov, expires_epoch_sec, state.node_public_key_hex
+    );
+    let sig = state.node_signing_key.sign(canonical.as_bytes());
+    format!(
+        "otnode1:{}:{}:{}:{}:{}:{}",
+        clean_onion,
+        clean_pub,
+        prov,
+        expires_epoch_sec,
+        state.node_public_key_hex,
+        hex::encode(sig.to_bytes())
+    )
+}
+
+pub fn verify_node_certificate(
+    node_onion: &str,
+    node_pubkey_hex: &str,
+    cert_token: &str,
+) -> bool {
+    let clean_onion = node_onion.trim().to_ascii_lowercase();
+    let clean_pub = node_pubkey_hex.trim().to_ascii_lowercase();
+    if !is_valid_onion_v3(&clean_onion) || !is_lower_hex_len(&clean_pub, 64) {
+        return false;
+    }
+    let clean_tok = cert_token.trim();
+    if !clean_tok.starts_with("otnode1:") {
+        return false;
+    }
+    let parts: Vec<&str> = clean_tok.split(':').collect();
+    if parts.len() != 7 {
+        return false;
+    }
+    let tok_onion = parts[1].trim().to_ascii_lowercase();
+    let tok_pub = parts[2].trim().to_ascii_lowercase();
+    let prov = parts[3].trim().to_ascii_uppercase();
+    let Ok(expires_sec) = parts[4].trim().parse::<i64>() else {
+        return false;
+    };
+    let issuer_pub = parts[5].trim().to_ascii_lowercase();
+    let sig_hex = parts[6].trim().to_ascii_lowercase();
+
+    if tok_onion != clean_onion || tok_pub != clean_pub || prov.is_empty() || expires_sec <= 0 {
+        return false;
+    }
+    if issuer_pub == tok_pub && issuer_pub != OFFICIAL_ADMIN_PUBKEY_HEX {
+        return false;
+    }
+    if !TRUSTED_NODE_CERT_ISSUERS.contains(&issuer_pub.as_str())
+        || !is_lower_hex_len(&sig_hex, 128)
+    {
+        return false;
+    }
+    if now_epoch_sec() > expires_sec {
+        return false;
+    }
+    let Ok(pk_bytes) = hex::decode(&issuer_pub) else {
+        return false;
+    };
+    let Ok(pk_arr) = <[u8; 32]>::try_from(pk_bytes.as_slice()) else {
+        return false;
+    };
+    let Ok(verifying_key) = VerifyingKey::from_bytes(&pk_arr) else {
+        return false;
+    };
+    let Ok(sig_bytes) = hex::decode(&sig_hex) else {
+        return false;
+    };
+    let Ok(sig) = Signature::from_slice(&sig_bytes) else {
+        return false;
+    };
+    let canonical = format!(
+        "ONIONTALK_NODE_CERT_V1|{}|{}|{}|{}|{}",
+        tok_onion, tok_pub, prov, expires_sec, issuer_pub
+    );
+    verifying_key.verify(canonical.as_bytes(), &sig).is_ok()
+}
+
 fn verify_founder_endpoint_auth(
     state: &AppState,
     headers: &HeaderMap,

@@ -44,12 +44,12 @@ Você só precisa ter instalado na máquina:
 
 ---
 
-## 🚀 Novidades da `v1.7.5` (`versionCode = 71` / Build 71) & Relay Node `v1.7.5` (`Build 24`) & Malha `v=32` — Zero-RTT Audio/Message Unlock Staging, UI-First Anti-Race, Grupos PQC (1 Grátis até 50) & Malha 35 Nós (`STRIX 31/31`)
+## 🚀 Novidades da `v1.8.0` (`versionCode = 73` / Build 73) & Relay Node `v1.8.0` (`Build 26`) & Malha `v=32` — Zero-RTT Audio/Message Unlock Staging, UI-First Anti-Race, Grupos PQC (1 Grátis até 50) & Malha 35 Nós (`STRIX 40/40`)
 
-- **📦 Downloads Diretos Assinados (`v1.7.5` — Latest Release Build 71)**:
-  - **Main Messenger APK (`org.oniontalk.messenger` `v1.7.5` Build 71)**: [**Download `OnionTalk.apk` (latest)**](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/OnionTalk.apk) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/SHA256SUMS.txt))
-  - **Standalone Android Relay Node APK (`org.oniontalk.relaynode` `v1.7.5` Build 24)**: [**Download `OnionTalk-RelayNode.apk` (latest)**](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/OnionTalk-RelayNode.apk) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/SHA256SUMS.txt))
-- **🛡️ Key Cryptographic & P2P Mesh Breakthroughs in `v1.7.5` (`Build 71` & Relay `Build 24` • `STRIX 31/31`)**:
+- **📦 Downloads Diretos Assinados (`v1.8.0` — Latest Release Build 73)**:
+  - **Main Messenger APK (`org.oniontalk.messenger` `v1.8.0` Build 73)**: [**Download `OnionTalk.apk` (latest)**](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/OnionTalk.apk) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/SHA256SUMS.txt))
+  - **Standalone Android Relay Node APK (`org.oniontalk.relaynode` `v1.8.0` Build 26)**: [**Download `OnionTalk-RelayNode.apk` (latest)**](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/OnionTalk-RelayNode.apk) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/SHA256SUMS.txt))
+- **🛡️ Key Cryptographic & P2P Mesh Breakthroughs in `v1.8.0` (`Build 73` & Relay `Build 26` • `STRIX 40/40`)**:
   1. **Hybrid Post-Quantum Cryptography (`__ENC_PQC_KYBER768_X25519_V3__`)**: Combines classical **Dual X25519 ECDH** with **NIST FIPS 203 ML-KEM-768 (`Kyber-768`)** key encapsulation via `HKDF-SHA256` + `ChaCha20-Poly1305 AEAD` + `Ed25519` outer envelope signatures to protect against *Harvest Now, Decrypt Later* quantum adversaries.
   2. **Ultra-Fast E2E Delivery (`1.139s – 1.244s`, avg `1.20s`)**: Upgraded **Dual Warm Socket Pool** (`minWarmSockets = 2` per `.onion` gateway, `70s/75s` Keep-Alive) achieving **100% pre-warmed Tor circuit reuse (`0ms` SOCKS5 handshake)** alongside a `250ms` speculative *Hedged Send*.
   3. **S/Kademlia XOR Distance Routing & Blinded Poller Affinity (`v=27`)**: All 20 global `.onion` v3 relays (`v=31`) now route by XOR distance (`SHA-256(peer_onion) ^ SHA-256(recipient_hash)`) with zero-knowledge RAM-only rendezvous affinity (`active_pollers`, `TTL 90s`, zero logs).

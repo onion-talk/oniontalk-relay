@@ -4,6 +4,11 @@ services:
     image: eriktonon/oniontalk:latest
     container_name: oniontalk-relay
     restart: unless-stopped
+    user: "10014:10014"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "127.0.0.1:${RELAY_PORT:-8080}:8080"
     volumes:

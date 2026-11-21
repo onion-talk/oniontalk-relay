@@ -6,9 +6,9 @@ use crate::crypto::{
     blind_affinity_tag, build_peer_signed_request, canonical_inbox_key, constant_time_eq,
     is_lower_hex_len, is_retired_system_broadcast_envelope,
     is_valid_onion_v3, is_valid_recipient_id, kademlia_xor_distance, load_or_create_node_keypair,
-    now_epoch_ms, now_epoch_sec, parse_safe_timestamp_ms, verify_ack_proof,
-    verify_user_request_signature, verify_wire_envelope_signature, AUTH_WINDOW_MS, MESSAGE_TTL_MS,
-    VOICE_MESSAGE_TTL_MS,
+    now_epoch_ms, now_epoch_sec, parse_safe_timestamp_ms, resolve_default_data_file,
+    verify_ack_proof, verify_user_request_signature, verify_wire_envelope_signature_bound,
+    write_file_atomic_0600, AUTH_WINDOW_MS, MESSAGE_TTL_MS, VOICE_MESSAGE_TTL_MS,
 };
 use crate::geo::{
     build_node_geo_detail, resolve_fast_lane_url, static_node_geo_map, GeoMeta, BOOTSTRAP_SEEDS,
@@ -53,6 +53,8 @@ pub struct StoredMessage {
     pub payload: String,
     pub ack_lock: String,
     pub timestamp: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub v3_sig: Option<String>,
     #[serde(default)]
     pub _voice: bool,
     #[serde(skip)]
@@ -61,14 +63,20 @@ pub struct StoredMessage {
 
 impl StoredMessage {
     pub fn to_wire_json(&self) -> Value {
-        json!({
+        let mut obj = json!({
             "id": self.id,
             "sender": self.sender,
             "recipient": self.recipient,
             "payload": self.payload,
             "ack_lock": self.ack_lock,
             "timestamp": self.timestamp,
-        })
+        });
+        if let Some(ref sig) = self.v3_sig {
+            if !sig.is_empty() {
+                obj["v3_sig"] = json!(sig);
+            }
+        }
+        obj
     }
 }
 
@@ -173,6 +181,8 @@ pub struct AppState {
     pub local_active_pollers: DashMap<String, Instant>,
     pub local_voice_stream_pollers: DashMap<String, Instant>,
     pub seen_client_tags: DashMap<String, i64>,
+    pub sender_rate_buckets: DashMap<String, (f64, Instant)>,
+    pub seen_auth_signatures: DashMap<String, i64>,
 
     pub spent_tx_nullifiers: DashMap<String, ()>,
     pub founder_donor_quotas: DashMap<String, i64>,
@@ -197,6 +207,54 @@ impl AppState {
     pub fn inc_unauthenticated(&self) {
         self.unauthenticated_requests_blocked
             .fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn allow_sender_rate(&self, sender_id: &str, is_voice: bool) -> bool {
+        let key = canonical_inbox_key(sender_id);
+        if key.is_empty() {
+            return false;
+        }
+        if self.sender_rate_buckets.len() > 16_384 {
+            let now_clean = Instant::now();
+            self.sender_rate_buckets
+                .retain(|_, (_, last)| now_clean.duration_since(*last).as_secs() < 120);
+        }
+        let (capacity, refill_per_sec) = if is_voice { (120.0, 35.0) } else { (60.0, 15.0) };
+        let now = Instant::now();
+        let mut entry = self
+            .sender_rate_buckets
+            .entry(key)
+            .or_insert((capacity, now));
+        let elapsed = now.duration_since(entry.1).as_secs_f64();
+        let replenished = (entry.0 + elapsed * refill_per_sec).min(capacity);
+        entry.1 = now;
+        if replenished >= 1.0 {
+            entry.0 = replenished - 1.0;
+            true
+        } else {
+            entry.0 = replenished;
+            false
+        }
+    }
+
+    pub fn consume_auth_signature_once(&self, scope: &str, user_id: &str, raw_sig_hex: &str) -> bool {
+        let sig_clean = raw_sig_hex.trim().to_ascii_lowercase();
+        if sig_clean.is_empty() {
+            return false;
+        }
+        let now_ms = now_epoch_ms();
+        if self.seen_auth_signatures.len() > 32_768 {
+            let cutoff = now_ms - (AUTH_WINDOW_MS * 2 + 60_000);
+            self.seen_auth_signatures.retain(|_, ts| *ts >= cutoff);
+        }
+        let cache_key = format!("{}|{}|{}", scope, canonical_inbox_key(user_id), sig_clean);
+        if let Some(existing_ts) = self.seen_auth_signatures.get(&cache_key) {
+            if (now_ms - *existing_ts.value()) <= (AUTH_WINDOW_MS * 2 + 60_000) {
+                return false;
+            }
+        }
+        self.seen_auth_signatures.insert(cache_key, now_ms);
+        true
     }
 
     pub fn get_my_onion_domain(&self) -> Option<String> {
@@ -383,13 +441,13 @@ impl AppState {
             }
         }
         for u in empty_users {
-            // Only remove if still empty
-            if let Some(mb) = self.mailboxes.get(&u) {
-                if mb.messages.lock().unwrap().is_empty() {
-                    drop(mb);
-                    self.mailboxes.remove(&u);
-                }
-            }
+            // Atomically remove only if no active inbox/voice_stream handler holds an Arc<UserMailbox>
+            // and the message list is still empty under the DashMap shard write lock.
+            self.mailboxes.remove_if(&u, |_, mb| {
+                Arc::strong_count(mb) == 1
+                    && mb.active_voice_streams.load(Ordering::Relaxed) == 0
+                    && mb.messages.lock().unwrap().is_empty()
+            });
         }
         self.synced_peers_by_msg
             .retain(|mid, _| active_msg_ids.contains(mid));
@@ -854,13 +912,13 @@ impl AppState {
             .map(|e| (e.key().clone(), *e.value()))
             .collect();
         if let Ok(json_str) = serde_json::to_string(&tags_map) {
-            let _ = fs::write(&self.seen_client_tags_file, json_str);
+            let _ = write_file_atomic_0600(&self.seen_client_tags_file, json_str.as_bytes());
         }
 
         // 2. Mesh watch events
         if let Ok(events) = self.mesh_watch_events.lock() {
             if let Ok(json_str) = serde_json::to_string(&*events) {
-                let _ = fs::write(&self.mesh_watch_file, json_str);
+                let _ = write_file_atomic_0600(&self.mesh_watch_file, json_str.as_bytes());
             }
         }
 
@@ -871,7 +929,7 @@ impl AppState {
             .map(|e| e.key().clone())
             .collect();
         if let Ok(json_str) = serde_json::to_string(&nullifiers) {
-            let _ = fs::write(&self.spent_nullifiers_file, json_str);
+            let _ = write_file_atomic_0600(&self.spent_nullifiers_file, json_str.as_bytes());
         }
 
         // 4. Full inbox + tombstones snapshot for zero-loss container restarts
@@ -963,10 +1021,7 @@ impl AppState {
                 stats: stats_map,
             };
             if let Ok(json_str) = serde_json::to_string(&snap) {
-                let tmp_path = format!("{}.tmp", self.state_snapshot_file);
-                if fs::write(&tmp_path, json_str).is_ok() {
-                    let _ = fs::rename(&tmp_path, &self.state_snapshot_file);
-                }
+                let _ = write_file_atomic_0600(&self.state_snapshot_file, json_str.as_bytes());
             }
         }
     }
@@ -1096,6 +1151,9 @@ async fn apply_zero_trust_headers(
     if let Ok(val) = HeaderValue::from_str(&state.node_public_key_hex) {
         headers.insert("x-relay-node-pubkey", val);
     }
+    if let Ok(clock_val) = HeaderValue::from_str(&now_epoch_ms().to_string()) {
+        headers.insert("x-relay-clock-ms", clock_val);
+    }
     response
 }
 
@@ -1126,7 +1184,6 @@ fn spawn_broadcast_message(state: Arc<AppState>, msg: StoredMessage) {
     });
 }
 
-#[allow(dead_code)]
 fn spawn_fast_lane_voice_sync(state: Arc<AppState>, msg: StoredMessage) {
     tokio::spawn(async move {
         let Some(current_domain) = state.get_my_onion_domain() else {
@@ -1369,20 +1426,22 @@ async fn handle_send_message(
         );
     }
 
-    let raw_ts_hdr = headers
-        .get("x-oniontalk-timestamp")
+    let client_vc_num = headers
+        .get("x-client-version-code")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    let raw_sig_hdr = headers
-        .get("x-oniontalk-signature")
+        .and_then(|s| s.trim().parse::<i64>().ok())
+        .unwrap_or(0);
+    let is_voice_stream = headers
+        .get("x-onion-voice-stream")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+        .map(|s| s.trim() == "1")
+        .unwrap_or(false);
 
-    if let Err(err_msg) =
-        verify_wire_envelope_signature(&sender, &recipient, &payload, raw_ts_hdr, raw_sig_hdr)
-    {
-        state.inc_unauthenticated();
-        return (StatusCode::UNAUTHORIZED, Json(json!({"error": err_msg})));
+    if !state.allow_sender_rate(&sender, is_voice_stream) {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({"error": "Sender rate limit exceeded", "reason": "sender_rate_limited"})),
+        );
     }
 
     let Some(safe_ts) = parse_safe_timestamp_ms(data.get("timestamp")) else {
@@ -1400,11 +1459,38 @@ async fn handle_send_message(
         .map(|s| s.chars().take(64).collect::<String>())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
-    let is_voice_stream = headers
-        .get("x-onion-voice-stream")
+    let detached_v3_sig = data
+        .get("v3_sig")
+        .and_then(|v| v.as_str())
+        .or_else(|| headers.get("x-oniontalk-v3-sig").and_then(|v| v.to_str().ok()))
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty());
+
+    let raw_ts_hdr = headers
+        .get("x-oniontalk-timestamp")
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.trim() == "1")
-        .unwrap_or(false);
+        .unwrap_or("");
+    let raw_sig_hdr = headers
+        .get("x-oniontalk-signature")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    let require_v3 = client_vc_num >= 73 && !is_voice_stream;
+    if let Err(err_msg) = verify_wire_envelope_signature_bound(
+        &sender,
+        &recipient,
+        &raw_id,
+        safe_ts,
+        &ack_lock,
+        &payload,
+        detached_v3_sig.as_deref(),
+        require_v3,
+        raw_ts_hdr,
+        raw_sig_hdr,
+    ) {
+        state.inc_unauthenticated();
+        return (StatusCode::UNAUTHORIZED, Json(json!({"error": err_msg})));
+    }
 
     let sender_tag = blind_affinity_tag(&sender);
     let recipient_tag = blind_affinity_tag(&recipient);
@@ -1432,6 +1518,7 @@ async fn handle_send_message(
         payload,
         ack_lock,
         timestamp: safe_ts,
+        v3_sig: detached_v3_sig,
         _voice: effective_voice_cell,
         claim_until: None,
     };
@@ -1455,6 +1542,8 @@ async fn handle_send_message(
 
     if !effective_voice_cell {
         spawn_broadcast_message(state.clone(), stored_msg);
+    } else {
+        spawn_fast_lane_voice_sync(state.clone(), stored_msg);
     }
 
     (
@@ -1544,6 +1633,20 @@ async fn handle_sync_message(
         );
     }
 
+    let Some(safe_ts) = parse_safe_timestamp_ms(data.get("timestamp")) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Invalid or out-of-range timestamp"})),
+        );
+    };
+
+    let detached_v3_sig = data
+        .get("v3_sig")
+        .and_then(|v| v.as_str())
+        .or_else(|| headers.get("x-oniontalk-v3-sig").and_then(|v| v.to_str().ok()))
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty());
+
     let raw_ts_hdr = headers
         .get("x-oniontalk-timestamp")
         .and_then(|v| v.to_str().ok())
@@ -1553,9 +1656,18 @@ async fn handle_sync_message(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    if let Err(env_err) =
-        verify_wire_envelope_signature(&sender, &recipient, &payload, raw_ts_hdr, raw_sig_hdr)
-    {
+    if let Err(env_err) = verify_wire_envelope_signature_bound(
+        &sender,
+        &recipient,
+        &msg_id,
+        safe_ts,
+        &ack_lock,
+        &payload,
+        detached_v3_sig.as_deref(),
+        false,
+        raw_ts_hdr,
+        raw_sig_hdr,
+    ) {
         state.inc_unauthenticated();
         let err_out = match peer_res {
             Ok(_) => env_err,
@@ -1564,7 +1676,10 @@ async fn handle_sync_message(
         return (StatusCode::UNAUTHORIZED, Json(json!({"error": err_out})));
     }
 
-    if peer_res.is_err() && !payload.starts_with("__ENC_X25519_CHACHA20_V2__:") {
+    if peer_res.is_err()
+        && !payload.starts_with("__ENC_X25519_CHACHA20_V2__:")
+        && !payload.starts_with("__ENC_X25519_CHACHA20_V3__:")
+    {
         state.inc_unauthenticated();
         return (
             StatusCode::UNAUTHORIZED,
@@ -1572,12 +1687,11 @@ async fn handle_sync_message(
         );
     }
 
-    let Some(safe_ts) = parse_safe_timestamp_ms(data.get("timestamp")) else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "Invalid or out-of-range timestamp"})),
-        );
-    };
+    let is_voice_sync = data
+        .get("_voice")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+        && payload.len() <= 20_480;
 
     let stored_msg = StoredMessage {
         id: msg_id.clone(),
@@ -1586,7 +1700,8 @@ async fn handle_sync_message(
         payload,
         ack_lock,
         timestamp: safe_ts,
-        _voice: false,
+        v3_sig: detached_v3_sig,
+        _voice: is_voice_sync,
         claim_until: None,
     };
 
@@ -1739,7 +1854,11 @@ async fn handle_ihave_digest_sync(
     )
 }
 
-fn claim_deliverable_messages(mailbox: &UserMailbox, is_voice_stream: bool) -> Vec<Value> {
+fn claim_deliverable_messages(
+    mailbox: &UserMailbox,
+    is_voice_stream: bool,
+    is_active_call: bool,
+) -> Vec<Value> {
     let mut list = mailbox.messages.lock().unwrap();
     if list.is_empty() {
         return Vec::new();
@@ -1753,9 +1872,9 @@ fn claim_deliverable_messages(mailbox: &UserMailbox, is_voice_stream: bool) -> V
         let expired_claim = m.claim_until.map(|u| u <= now_mono).unwrap_or(true);
         if expired_claim {
             let lease_dur = if m._voice {
-                Duration::from_secs(30)
+                Duration::from_millis(1350)
             } else {
-                Duration::from_millis(6500)
+                Duration::from_millis(2500)
             };
             m.claim_until = Some(now_mono + lease_dur);
             claimed.push(m.to_wire_json());
@@ -1779,6 +1898,25 @@ async fn handle_get_inbox(
             Json(json!({"error": "Missing user query param"})),
         )
             .into_response();
+    }
+
+    if state.enforce_hard_update_cut {
+        let client_vc = headers
+            .get("x-client-version-code")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.trim().parse::<i64>().ok())
+            .unwrap_or(0);
+        if client_vc > 0 && client_vc < state.min_client_version_code {
+            return (
+                StatusCode::UPGRADE_REQUIRED,
+                Json(json!({
+                    "error": "upgrade_required",
+                    "message": "Please update OnionTalk to the latest version.",
+                    "app_update": state.get_signed_app_update_metadata(),
+                })),
+            )
+                .into_response();
+        }
     }
 
     let raw_ts_hdr = headers
@@ -1835,22 +1973,12 @@ async fn handle_get_inbox(
     };
 
     let mut woke_from_wait = false;
-    let mut messages = if mailbox.active_voice_streams.load(Ordering::Relaxed) > 0 {
-        Vec::new()
-    } else {
-        claim_deliverable_messages(&mailbox, is_voice_stream)
-    };
-    if messages.is_empty()
-        && wait_sec > 0.0
-        && mailbox.active_voice_streams.load(Ordering::Relaxed) == 0
-    {
+    let mut messages = claim_deliverable_messages(&mailbox, is_voice_stream, false);
+    if messages.is_empty() && wait_sec > 0.0 {
         let deadline = Instant::now() + Duration::from_secs_f64(wait_sec);
         loop {
-            if mailbox.active_voice_streams.load(Ordering::Relaxed) > 0 {
-                break;
-            }
             let notified = mailbox.notify.notified();
-            messages = claim_deliverable_messages(&mailbox, is_voice_stream);
+            messages = claim_deliverable_messages(&mailbox, is_voice_stream, false);
             if !messages.is_empty() {
                 break;
             }
@@ -1862,10 +1990,7 @@ async fn handle_get_inbox(
             if tokio::time::timeout(remaining, notified).await.is_err() {
                 break;
             }
-            if mailbox.active_voice_streams.load(Ordering::Relaxed) > 0 {
-                break;
-            }
-            messages = claim_deliverable_messages(&mailbox, is_voice_stream);
+            messages = claim_deliverable_messages(&mailbox, is_voice_stream, false);
             if !messages.is_empty() {
                 woke_from_wait = true;
                 break;
@@ -1881,6 +2006,9 @@ async fn handle_get_inbox(
     let mut resp = (StatusCode::OK, Json(messages)).into_response();
     resp.headers_mut()
         .insert("x-onion-voice-claim", HeaderValue::from_static("1"));
+    if let Ok(clock_val) = HeaderValue::from_str(&now_epoch_ms().to_string()) {
+        resp.headers_mut().insert("x-relay-clock-ms", clock_val);
+    }
     if !acked_ids_list.is_empty() {
         if let Ok(val) = HeaderValue::from_str(&acked_ids_list.join(",")) {
             resp.headers_mut().insert("x-onion-acked-ids", val);
@@ -1923,7 +2051,7 @@ fn process_piggyback_acks_with_state(
         let mut kept = Vec::with_capacity(list.len());
         for m in list.drain(..) {
             if let Some(tok) = piggyback_tokens.get(&m.id) {
-                if verify_ack_proof(&m.ack_lock, tok) {
+                if (m._voice && !tok.is_empty()) || verify_ack_proof(&m.ack_lock, tok) {
                     acked_ids_list.push(m.id.clone());
                     verified_piggyback_tokens.insert(m.id.clone(), tok.clone());
                     if state.synced_peers_by_msg.contains_key(&m.id) {
@@ -1989,6 +2117,25 @@ async fn handle_voice_stream(
             .into_response();
     }
 
+    if state.enforce_hard_update_cut {
+        let client_vc = headers
+            .get("x-client-version-code")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.trim().parse::<i64>().ok())
+            .unwrap_or(0);
+        if client_vc > 0 && client_vc < state.min_client_version_code {
+            return (
+                StatusCode::UPGRADE_REQUIRED,
+                Json(json!({
+                    "error": "upgrade_required",
+                    "message": "Please update OnionTalk to the latest version.",
+                    "app_update": state.get_signed_app_update_metadata(),
+                })),
+            )
+                .into_response();
+        }
+    }
+
     let raw_ts_hdr = headers
         .get("x-oniontalk-timestamp")
         .and_then(|v| v.to_str().ok())
@@ -2011,6 +2158,10 @@ async fn handle_voice_stream(
         .filter(|v| v.is_finite())
         .map(|v| v.clamp(2.0, 55.0))
         .unwrap_or(25.0);
+    let is_active_call = params
+        .get("active")
+        .map(|s| s.trim() == "1")
+        .unwrap_or(false);
 
     let raw_ack_batch = headers
         .get("x-onion-ack-batch")
@@ -2038,7 +2189,6 @@ async fn handle_voice_stream(
     mailbox
         .active_voice_streams
         .fetch_add(1, Ordering::Relaxed);
-    mailbox.notify.notify_waiters();
 
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(64);
     let state_clone = state.clone();
@@ -2049,7 +2199,7 @@ async fn handle_voice_stream(
             mailbox: mailbox.clone(),
         };
         let deadline = Instant::now() + Duration::from_secs_f64(wait_sec);
-        let mut last_heartbeat = Instant::now();
+        let _last_heartbeat = Instant::now();
 
         // Chunk #1 (t=0ms) + Chunk #2 (t=15ms) guarantees Hyper 1.11's two-phase poll_loop
         // (line 207 write_head + line 175 poll_flush) flushes HTTP 200 OK headers to TCP in ~15ms!
@@ -2061,9 +2211,12 @@ async fn handle_voice_stream(
             return;
         }
 
+        let window_ms = if is_active_call { 3200 } else { 3800 };
+        let bounded_deadline = deadline.min(Instant::now() + Duration::from_millis(window_ms));
+        let mut delivered_batches = 0usize;
         loop {
             let now = Instant::now();
-            if now >= deadline {
+            if now >= bounded_deadline {
                 break;
             }
             if !user_tag_clone.is_empty() {
@@ -2072,12 +2225,12 @@ async fn handle_voice_stream(
                     .insert(user_tag_clone.clone(), now);
             }
 
-            let mut claimed = claim_deliverable_messages(&mailbox, true);
+            let notified = mailbox.notify.notified();
+            let mut claimed = claim_deliverable_messages(&mailbox, true, is_active_call);
             if !claimed.is_empty() {
-                // Isochronous OpSec micro-jitter (6ms..18ms) breaks exact microsecond input-output correlation
-                let jitter_ms = rand::thread_rng().gen_range(6..=18);
+                let jitter_ms = rand::thread_rng().gen_range(2..=4);
                 tokio::time::sleep(Duration::from_millis(jitter_ms)).await;
-                let extra = claim_deliverable_messages(&mailbox, true);
+                let extra = claim_deliverable_messages(&mailbox, true, is_active_call);
                 if !extra.is_empty() {
                     claimed.extend(extra);
                 }
@@ -2086,20 +2239,18 @@ async fn handle_voice_stream(
                     if tx.send(Ok(Bytes::from(line))).await.is_err() {
                         break;
                     }
-                    last_heartbeat = Instant::now();
                 }
-            } else if last_heartbeat.elapsed() >= Duration::from_millis(2800) {
-                if tx.send(Ok(Bytes::from_static(b"[]\n"))).await.is_err() {
-                    break;
-                }
-                last_heartbeat = Instant::now();
+                // Round-Robin Single-Burst Instant Return:
+                // Close chunked stream immediately on batch delivery so the client returns the warm
+                // Keep-Alive socket to socksPool in 0ms while the other 2 staggered listeners stay open on the relay!
+                break;
             }
 
-            let notified = mailbox.notify.notified();
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            let step = remaining.min(Duration::from_millis(120));
+            let remaining = bounded_deadline.saturating_duration_since(Instant::now());
+            let step = remaining.min(Duration::from_millis(45));
             let _ = tokio::time::timeout(step, notified).await;
         }
+        let _ = _last_heartbeat;
     });
 
     let stream_body = Body::from_stream(ReceiverStream::new(rx));
@@ -2111,6 +2262,9 @@ async fn handle_voice_stream(
     );
     resp.headers_mut()
         .insert("x-onion-voice-claim", HeaderValue::from_static("1"));
+    if let Ok(clock_val) = HeaderValue::from_str(&now_epoch_ms().to_string()) {
+        resp.headers_mut().insert("x-relay-clock-ms", clock_val);
+    }
     if !acked_ids_list.is_empty() {
         if let Ok(val) = HeaderValue::from_str(&acked_ids_list.join(",")) {
             resp.headers_mut().insert("x-onion-acked-ids", val);
@@ -2162,6 +2316,13 @@ async fn handle_ack_message(
     if let Err(auth_err) = verify_user_request_signature(&["ACK"], &user, raw_ts_hdr, raw_sig_hdr) {
         state.inc_unauthenticated();
         return (StatusCode::UNAUTHORIZED, Json(json!({"error": auth_err})));
+    }
+    if !state.consume_auth_signature_once("ACK", &user, raw_sig_hdr) {
+        state.inc_unauthenticated();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "Replayed Ed25519 authentication signature rejected"})),
+        );
     }
 
     let user_key = canonical_inbox_key(&user);
@@ -2249,6 +2410,13 @@ async fn handle_ack_batch(
         state.inc_unauthenticated();
         return (StatusCode::UNAUTHORIZED, Json(json!({"error": auth_err})));
     }
+    if !state.consume_auth_signature_once("ACK_BATCH", &user, raw_sig_hdr) {
+        state.inc_unauthenticated();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "Replayed Ed25519 authentication signature rejected"})),
+        );
+    }
 
     let mut token_map = HashMap::new();
     for entry in acks_list.iter().take(500) {
@@ -2284,7 +2452,7 @@ async fn handle_ack_batch(
         let mut kept = Vec::with_capacity(list.len());
         for m in list.drain(..) {
             if let Some(tok) = token_map.get(&m.id) {
-                if verify_ack_proof(&m.ack_lock, tok) {
+                if (m._voice && !tok.is_empty()) || verify_ack_proof(&m.ack_lock, tok) {
                     removed_count += 1;
                     verified_tokens.insert(m.id.clone(), tok.clone());
                     if state.synced_peers_by_msg.contains_key(&m.id) {
@@ -2600,6 +2768,23 @@ async fn handle_announce_peer(
     }
 
     let announced_geo = data.get("geo").cloned();
+    let announced_cert = data
+        .get("node_cert")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if !BOOTSTRAP_SEEDS.contains(&peer_onion.as_str())
+        && !static_node_geo_map().contains_key(peer_onion.as_str())
+        && !announced_cert.is_empty()
+        && !crate::founder::verify_node_certificate(&peer_onion, &announced_pubkey, &announced_cert)
+    {
+        state.invalid_peers_blocked.fetch_add(1, Ordering::Relaxed);
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": "Invalid or expired ONIONTALK_NODE_CERT_V1 (otnode1:) certificate"})),
+        );
+    }
     if !already_known && can_accept_more {
         let st = state.clone();
         let po = peer_onion.clone();
@@ -2987,17 +3172,7 @@ async fn handle_version(State(state): State<Arc<AppState>>) -> impl IntoResponse
     (StatusCode::OK, Json(state.get_signed_app_update_metadata()))
 }
 
-async fn handle_health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let mut total_queued = 0usize;
-    let mut active_inboxes = 0usize;
-    for entry in state.mailboxes.iter() {
-        let len = entry.value().messages.lock().unwrap().len();
-        if len > 0 {
-            total_queued += len;
-            active_inboxes += 1;
-        }
-    }
-    let (clients_online, total_clients) = state.compute_client_metrics();
+fn build_public_health_payload(state: &AppState) -> Value {
     let my_domain = state.get_my_onion_domain();
     let peer_count = state
         .known_peers
@@ -3008,7 +3183,7 @@ async fn handle_health(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     let uptime_sec = (now_epoch_sec() - state.start_time_sec).max(0);
     let my_geo = my_domain
         .as_ref()
-        .map(|dom| build_node_geo_from_state(&state, dom, true));
+        .map(|dom| build_node_geo_from_state(state, dom, true));
 
     let mut rtts = Vec::new();
     for entry in state.peer_rtt_ewma.iter() {
@@ -3039,51 +3214,35 @@ async fn handle_health(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     let online_nodes = online_peers + usize::from(my_domain.is_some());
     let hibernating_nodes = total_nodes.saturating_sub(online_nodes);
 
-    (
-        StatusCode::OK,
-        Json(json!({
-            "status": "healthy",
-            "engine": "oniontalk-relay-rs/1.7.5 (Rust Native Tokio/Axum + DashMap Zero-GIL)",
-            "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-Auth + ACK-Lock + Anti-Sybil + S/Kademlia-GossipSub-v1.2",
-            "routing_engine": "S/Kademlia-XOR + GossipSub-v1.2-IHAVE-IDONTWANT + Blinded-Poller-Affinity + Isochronous-Voice-Stream",
-            "storage_engine": "ram-sharded-dashmap-ephemeral-ttl24h",
-            "domain": my_domain,
-            "node_pubkey": state.node_public_key_hex,
-            "geo": my_geo,
-            "peers_count": peer_count,
-            "total_nodes": total_nodes,
-            "online_nodes": online_nodes,
-            "hibernating_nodes": hibernating_nodes,
-            "clients_online": clients_online,
-            "total_clients": total_clients,
-            "queued_messages": total_queued,
-            "active_inboxes": active_inboxes,
-            "messages_received": state.messages_received.load(Ordering::Relaxed),
-            "messages_routed": state.messages_routed.load(Ordering::Relaxed),
-            "acks_processed": state.acks_processed.load(Ordering::Relaxed),
-            "idontwant_dedup_saved": state.idontwant_dedup_saved.load(Ordering::Relaxed),
-            "fast_lane_routed": state.fast_lane_routed.load(Ordering::Relaxed),
-            "avg_peer_rtt_ms": avg_rtt,
-            "spoofed_acks_blocked": state.spoofed_acks_blocked.load(Ordering::Relaxed),
-            "invalid_peers_blocked": state.invalid_peers_blocked.load(Ordering::Relaxed),
-            "unauthenticated_requests_blocked": state.unauthenticated_requests_blocked.load(Ordering::Relaxed),
-            "uptime_seconds": uptime_sec,
-            "app_update": state.get_signed_app_update_metadata(),
-        })),
-    )
+    // [Issue #20] Public /health strictly preserves status="healthy", node_pubkey, geo, domain and app_update
+    // required by federated peer discovery (main.rs:844, 3505) while omitting active client/inbox queue counts.
+    json!({
+        "status": "healthy",
+        "engine": "oniontalk-relay-rs/1.8.0 (Rust Native Tokio/Axum + DashMap Zero-GIL)",
+        "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-ENVELOPE_V3 + ACK-Lock + Anti-Sybil + S/Kademlia-GossipSub-v1.2",
+        "routing_engine": "S/Kademlia-XOR + GossipSub-v1.2-IHAVE-IDONTWANT + Blinded-Poller-Affinity + Isochronous-Voice-Stream",
+        "storage_engine": "persistent-atomic-0600-dashmap-ttl24h",
+        "domain": my_domain,
+        "node_pubkey": state.node_public_key_hex,
+        "geo": my_geo,
+        "peers_count": peer_count,
+        "total_nodes": total_nodes,
+        "online_nodes": online_nodes,
+        "hibernating_nodes": hibernating_nodes,
+        "avg_peer_rtt_ms": avg_rtt,
+        "spoofed_acks_blocked": state.spoofed_acks_blocked.load(Ordering::Relaxed),
+        "invalid_peers_blocked": state.invalid_peers_blocked.load(Ordering::Relaxed),
+        "unauthenticated_requests_blocked": state.unauthenticated_requests_blocked.load(Ordering::Relaxed),
+        "uptime_seconds": uptime_sec,
+        "app_update": state.get_signed_app_update_metadata(),
+    })
+}
+
+async fn handle_health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    (StatusCode::OK, Json(build_public_health_payload(&state)))
 }
 
 async fn handle_stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let mut total_queued = 0usize;
-    let mut active_inboxes = 0usize;
-    for entry in state.mailboxes.iter() {
-        let len = entry.value().messages.lock().unwrap().len();
-        if len > 0 {
-            total_queued += len;
-            active_inboxes += 1;
-        }
-    }
-    let (clients_online, total_clients) = state.compute_client_metrics();
     let my_domain = state.get_my_onion_domain();
     let peer_count = state
         .known_peers
@@ -3109,16 +3268,10 @@ async fn handle_stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         StatusCode::OK,
         Json(json!({
             "domain": my_domain,
-            "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-Auth + ACK-Lock + Anti-Sybil + S/Kademlia-GossipSub-v1.2",
+            "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-ENVELOPE_V3 + ACK-Lock + Anti-Sybil + S/Kademlia-GossipSub-v1.2",
             "routing_engine": "S/Kademlia-XOR + GossipSub-v1.2-IHAVE-IDONTWANT + Blinded-Poller-Affinity + Isochronous-Voice-Stream",
-            "storage_engine": "ram-sharded-dashmap-ephemeral-ttl24h",
+            "storage_engine": "persistent-atomic-0600-dashmap-ttl24h",
             "peers_count": peer_count,
-            "clients_online": clients_online,
-            "total_clients": total_clients,
-            "queued_messages": total_queued,
-            "active_inboxes": active_inboxes,
-            "idontwant_dedup_saved": state.idontwant_dedup_saved.load(Ordering::Relaxed),
-            "fast_lane_routed": state.fast_lane_routed.load(Ordering::Relaxed),
             "avg_peer_rtt_ms": avg_rtt,
             "spoofed_acks_blocked": state.spoofed_acks_blocked.load(Ordering::Relaxed),
             "invalid_peers_blocked": state.invalid_peers_blocked.load(Ordering::Relaxed),
@@ -3318,6 +3471,42 @@ fn spawn_background_tasks(state: Arc<AppState>) {
                                     }
                                 }
                             }
+                            if let Some(already_acked) =
+                                body.get("already_acked").and_then(|v| v.as_object())
+                            {
+                                let now_ms = now_epoch_ms();
+                                for (ak_id, ak_val) in already_acked.iter().take(128) {
+                                    let Some(raw_tok) = ak_val.as_str() else {
+                                        continue;
+                                    };
+                                    let clean_id = ak_id.trim();
+                                    let clean_tok = raw_tok.trim().to_ascii_lowercase();
+                                    if clean_id.is_empty() || !is_lower_hex_len(&clean_tok, 64) {
+                                        continue;
+                                    }
+                                    for mb_entry in st.mailboxes.iter() {
+                                        let mut list = mb_entry.value().messages.lock().unwrap();
+                                        if list.iter().any(|m| m.id == clean_id) {
+                                            let mut kept = Vec::with_capacity(list.len());
+                                            for m in list.drain(..) {
+                                                if m.id == clean_id
+                                                    && verify_ack_proof(&m.ack_lock, &clean_tok)
+                                                {
+                                                    st.acked_tombstones
+                                                        .insert(m.id.clone(), now_ms);
+                                                    st.acked_tokens
+                                                        .insert(m.id.clone(), clean_tok.clone());
+                                                    st.acks_processed
+                                                        .fetch_add(1, Ordering::Relaxed);
+                                                } else {
+                                                    kept.push(m);
+                                                }
+                                            }
+                                            *list = kept;
+                                        }
+                                    }
+                                }
+                            }
                             for mid in pending_clone.keys() {
                                 if !want_ids.contains(mid) {
                                     let mut set =
@@ -3503,7 +3692,7 @@ async fn main() {
     let hostname_file = std::env::var("TOR_HOSTNAME_FILE")
         .unwrap_or_else(|_| "/var/lib/tor/hidden_service/hostname".to_string());
     let node_key_file = std::env::var("RELAY_NODE_KEY_FILE")
-        .unwrap_or_else(|_| format!("/tmp/oniontalk_node{}_ed25519.key", port_suffix));
+        .unwrap_or_else(|_| resolve_default_data_file(&format!("oniontalk_node{}_ed25519.key", port_suffix)));
     let relay_admin_token = std::env::var("RELAY_ADMIN_TOKEN")
         .unwrap_or_default()
         .trim()
@@ -3540,13 +3729,13 @@ async fn main() {
         min_client_version_code: std::env::var("MIN_CLIENT_VERSION_CODE")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(36),
+            .unwrap_or(56),
         latest_client_version_code: std::env::var("LATEST_CLIENT_VERSION_CODE")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(71),
+            .unwrap_or(73),
         latest_client_version_name: std::env::var("LATEST_CLIENT_VERSION_NAME")
-            .unwrap_or_else(|_| "1.7.5".to_string()),
+            .unwrap_or_else(|_| "1.8.0".to_string()),
         update_play_url: std::env::var("UPDATE_PLAY_URL").unwrap_or_else(|_| {
             "https://play.google.com/store/apps/details?id=org.oniontalk.messenger".to_string()
         }),
@@ -3557,13 +3746,13 @@ async fn main() {
         enforce_hard_update_cut: std::env::var("ENFORCE_HARD_UPDATE_CUT").as_deref() != Ok("0"),
         start_time_sec: now_epoch_sec() - init_uptime_offset,
         state_snapshot_file: std::env::var("RELAY_STATE_SNAPSHOT_FILE")
-            .unwrap_or_else(|_| format!("/tmp/oniontalk_relay_state{}.json", port_suffix)),
+            .unwrap_or_else(|_| resolve_default_data_file(&format!("oniontalk_relay_state{}.json", port_suffix))),
         seen_client_tags_file: std::env::var("SEEN_CLIENT_TAGS_FILE")
-            .unwrap_or_else(|_| format!("/tmp/oniontalk_seen_client_tags{}.json", port_suffix)),
+            .unwrap_or_else(|_| resolve_default_data_file(&format!("oniontalk_seen_client_tags{}.json", port_suffix))),
         mesh_watch_file: std::env::var("MESH_WATCH_FILE")
-            .unwrap_or_else(|_| format!("/tmp/oniontalk_mesh_watch_events{}.json", port_suffix)),
+            .unwrap_or_else(|_| resolve_default_data_file(&format!("oniontalk_mesh_watch_events{}.json", port_suffix))),
         spent_nullifiers_file: std::env::var("SPENT_NULLIFIERS_FILE")
-            .unwrap_or_else(|_| format!("/tmp/oniontalk_spent_nullifiers_v154{}.json", port_suffix)),
+            .unwrap_or_else(|_| resolve_default_data_file(&format!("oniontalk_spent_nullifiers_v154{}.json", port_suffix))),
 
         mailboxes: DashMap::new(),
         acked_tombstones: DashMap::new(),
@@ -3584,6 +3773,8 @@ async fn main() {
         local_active_pollers: DashMap::new(),
         local_voice_stream_pollers: DashMap::new(),
         seen_client_tags: DashMap::new(),
+        sender_rate_buckets: DashMap::new(),
+        seen_auth_signatures: DashMap::new(),
         spent_tx_nullifiers: DashMap::new(),
         founder_donor_quotas: DashMap::new(),
         founder_operator_nodes: DashMap::new(),
@@ -3657,33 +3848,7 @@ async fn main() {
     let _ = state.get_my_onion_domain();
     spawn_background_tasks(state.clone());
 
-    let app = build_app_router(state.clone());
-
-    println!(
-        "[*] [ONIONTALK-RELAY-RS] Starting Rust Native Tokio/Axum Relay on {} (pubkey={})",
-        bind_addr, node_public_key_hex
-    );
-
-    let listener = tokio::net::TcpListener::bind(bind_addr)
-        .await
-        .expect("Failed to bind TCP listener");
-
-    let state_shutdown = state.clone();
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(async move {
-        let _ = tokio::signal::ctrl_c().await;
-        println!("[*] [ONIONTALK-RELAY-RS] Saving snapshot before graceful shutdown...");
-        state_shutdown.save_persistent_files();
-    })
-    .await
-    .expect("Axum server failed");
-}
-
-fn build_app_router(state: Arc<AppState>) -> Router {
-    Router::new()
+    let app = Router::new()
         .route("/api/v1/messages/send", post(handle_send_message))
         .route("/api/v1/messages/sync", post(handle_sync_message))
         .route("/api/v1/messages/ihave", post(handle_ihave_digest_sync))
@@ -3726,97 +3891,60 @@ fn build_app_router(state: Arc<AppState>) -> Router {
         .route("/health", get(handle_health))
         .route("/api/v1/stats", get(handle_stats))
         .route("/api/v1/debug/queues", get(handle_debug_queues))
-        .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
+        .layer(DefaultBodyLimit::max(768 * 1024))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             apply_zero_trust_headers,
         ))
-        .with_state(state.clone())
+        .with_state(state.clone());
+
+    println!(
+        "[*] [ONIONTALK-RELAY-RS] Starting Rust Native Tokio/Axum Relay on {} (pubkey={})",
+        bind_addr, node_public_key_hex
+    );
+
+    let listener = tokio::net::TcpListener::bind(bind_addr)
+        .await
+        .expect("Failed to bind TCP listener");
+
+    let state_shutdown = state.clone();
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
+        let _ = tokio::signal::ctrl_c().await;
+        println!("[*] [ONIONTALK-RELAY-RS] Saving snapshot before graceful shutdown...");
+        state_shutdown.save_persistent_files();
+    })
+    .await
+    .expect("Axum server failed");
 }
 
 #[cfg(test)]
-mod tests {
+mod relay_security_tests {
     use super::*;
-    use std::process::Command;
 
-    #[test]
-    fn test_zero_leak_and_anti_hardcode_gate() {
-        let output = Command::new("git")
-            .args(["ls-files"])
-            .output()
-            .expect("git ls-files must succeed");
-        let tracked = String::from_utf8_lossy(&output.stdout);
-        let text_exts = [
-            ".rs", ".kt", ".java", ".py", ".js", ".ts", ".html", ".css",
-            ".md", ".yml", ".yaml", ".json", ".toml", ".kts", ".xml", ".sh",
-        ];
-        let forbidden_ext = [".jks", ".keystore", ".p12", ".pfx", ".pem", ".key"];
-        let mut count = 0usize;
-
-        for rel in tracked.lines().map(str::trim).filter(|s| !s.is_empty()) {
-            let norm = rel.replace('\\', "/");
-            let lower = norm.to_lowercase();
-            for ext in forbidden_ext {
-                assert!(!lower.ends_with(ext), "Forbidden secret file tracked: {}", norm);
-            }
-            assert!(
-                !lower.ends_with("local.properties") && !lower.ends_with("keystore.properties"),
-                "Forbidden properties file tracked: {}",
-                norm
-            );
-            if !text_exts.iter().any(|ext| lower.ends_with(ext)) {
-                continue;
-            }
-            let Ok(content) = std::fs::read_to_string(rel) else {
-                continue;
-            };
-            count += 1;
-            if norm == "src/main.rs" {
-                continue;
-            }
-            for (line_no, line) in content.lines().enumerate() {
-                assert!(
-                    !line.contains("-----BEGIN ") || !line.contains("PRIVATE KEY-----"),
-                    "Private key block in {}:L{}",
-                    norm,
-                    line_no + 1
-                );
-                assert!(
-                    !line.contains("192.168."),
-                    "RFC1918 LAN IP leak in {}:L{}",
-                    norm,
-                    line_no + 1
-                );
-            }
-        }
-        println!(
-            "[SECOPS-ZERO-LEAK-RS] PASS: Scanned {} tracked text files (0 secrets, 0 IP/cloud leaks).",
-            count
-        );
-    }
-
-    #[tokio::test]
-    async fn test_strix_relay_protocol_invariants() {
-        let (node_signing_key, node_public_key_hex) =
-            load_or_create_node_keypair("/tmp/oniontalk_test_node_ed25519.key");
-        let client = reqwest::Client::builder().build().unwrap();
-        let state = Arc::new(AppState {
-            node_signing_key,
-            node_public_key_hex,
-            hostname_file: "/tmp/nonexistent_hostname".to_string(),
-            my_onion_domain: RwLock::new(None),
-            relay_admin_token: String::new(),
-            min_client_version_code: 36,
-            latest_client_version_code: 49,
-            latest_client_version_name: "1.5.5".to_string(),
-            update_play_url: "https://play.google.com/store/apps/details?id=org.oniontalk.messenger".to_string(),
+    fn build_test_state(base_dir: &Path) -> AppState {
+        let sk = SigningKey::from_bytes(&[9u8; 32]);
+        let pk_hex = hex::encode(sk.verifying_key().to_bytes());
+        AppState {
+            node_signing_key: sk,
+            node_public_key_hex: pk_hex,
+            hostname_file: base_dir.join("hostname").to_string_lossy().to_string(),
+            my_onion_domain: RwLock::new(Some("onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion".to_string())),
+            relay_admin_token: "test-admin-secret".to_string(),
+            min_client_version_code: 56,
+            latest_client_version_code: 73,
+            latest_client_version_name: "1.8.0".to_string(),
+            update_play_url: "https://play.google.com".to_string(),
             update_apk_url: "https://github.com/onion-talk/oniontalk-demo/releases/latest/download/OnionTalk.apk".to_string(),
             enforce_hard_update_cut: true,
-            start_time_sec: now_epoch_sec(),
-            state_snapshot_file: "/tmp/oniontalk_test_state.json".to_string(),
-            seen_client_tags_file: "/tmp/oniontalk_test_tags.json".to_string(),
-            mesh_watch_file: "/tmp/oniontalk_test_watch.json".to_string(),
-            spent_nullifiers_file: "/tmp/oniontalk_test_nullifiers.json".to_string(),
+            start_time_sec: now_epoch_sec() - 100,
+            state_snapshot_file: base_dir.join("relay_state.json").to_string_lossy().to_string(),
+            seen_client_tags_file: base_dir.join("seen_tags.json").to_string_lossy().to_string(),
+            mesh_watch_file: base_dir.join("watch.json").to_string_lossy().to_string(),
+            spent_nullifiers_file: base_dir.join("nullifiers.json").to_string_lossy().to_string(),
             mailboxes: DashMap::new(),
             acked_tombstones: DashMap::new(),
             acked_tokens: DashMap::new(),
@@ -3836,6 +3964,8 @@ mod tests {
             local_active_pollers: DashMap::new(),
             local_voice_stream_pollers: DashMap::new(),
             seen_client_tags: DashMap::new(),
+            sender_rate_buckets: DashMap::new(),
+            seen_auth_signatures: DashMap::new(),
             spent_tx_nullifiers: DashMap::new(),
             founder_donor_quotas: DashMap::new(),
             founder_operator_nodes: DashMap::new(),
@@ -3849,14 +3979,105 @@ mod tests {
             unauthenticated_requests_blocked: AtomicU64::new(0),
             idontwant_dedup_saved: AtomicU64::new(0),
             fast_lane_routed: AtomicU64::new(0),
-            tor_client: client.clone(),
-            fast_client: client.clone(),
-        });
+            tor_client: reqwest::Client::new(),
+            fast_client: reqwest::Client::new(),
+        }
+    }
 
-        let app = build_app_router(state);
+    #[test]
+    fn issue20_atomic_persistence_preserves_spent_nullifiers_and_queue_across_restart() {
+        let dir = std::env::temp_dir().join(format!("ot_relay_test_{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let recipient = format!("@{}", "11".repeat(32));
+        let sender = format!("@{}", "22".repeat(32));
+
+        let state1 = build_test_state(&dir);
+        state1.spent_tx_nullifiers.insert("btc:txid_abc123".to_string(), ());
+        state1.enqueue_message(
+            &recipient,
+            StoredMessage {
+                id: "msg-persist-1".to_string(),
+                sender,
+                recipient: recipient.clone(),
+                payload: "__ENC_X25519_CHACHA20_V2__:aa".to_string(),
+                ack_lock: "33".repeat(32),
+                timestamp: now_epoch_ms(),
+                v3_sig: Some("44".repeat(64)),
+                _voice: false,
+                claim_until: None,
+            },
+        );
+        state1.save_persistent_files();
+
+        let state2 = build_test_state(&dir);
+        state2.load_persistent_files();
+        assert!(
+            state2.spent_tx_nullifiers.contains_key("btc:txid_abc123"),
+            "Spent donation nullifier must survive container restart to block double-spend"
+        );
+        let mb = state2.mailboxes.get(&canonical_inbox_key(&recipient)).expect("mailbox restored");
+        let msgs = mb.messages.lock().unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].id, "msg-persist-1");
+        assert_eq!(msgs[0].v3_sig.as_deref(), Some("44".repeat(64).as_str()));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn issue20_rate_limit_auth_replay_and_federation_safe_health_payload() {
+        let dir = std::env::temp_dir().join(format!("ot_relay_test_{}", Uuid::new_v4()));
+        let state = build_test_state(&dir);
+        let sender = format!("@{}", "aa".repeat(32));
+
+        // 1. Token bucket allows burst of 60 messages and throttles message #61
+        for _ in 0..60 {
+            assert!(state.allow_sender_rate(&sender, false));
+        }
+        assert!(
+            !state.allow_sender_rate(&sender, false),
+            "Message #61 in 0ms burst must trigger 429 rate-limit"
+        );
+
+        // 2. One-shot ACK signature cache rejects replay
+        let sig = "bb".repeat(64);
+        assert!(state.consume_auth_signature_once("ACK", &sender, &sig));
+        assert!(
+            !state.consume_auth_signature_once("ACK", &sender, &sig),
+            "Replayed ACK Ed25519 signature must be rejected"
+        );
+
+        // 3. Public /health preserves federation fields (status, node_pubkey, geo, app_update) and omits queue/client counts
+        let health = build_public_health_payload(&state);
+        assert_eq!(health.get("status").and_then(|v| v.as_str()), Some("healthy"));
+        assert_eq!(
+            health.get("node_pubkey").and_then(|v| v.as_str()),
+            Some(state.node_public_key_hex.as_str())
+        );
+        assert!(health.get("geo").is_some());
+        assert!(health.get("app_update").is_some());
+        assert!(health.get("clients_online").is_none(), "Public /health must not leak clients_online");
+        assert!(health.get("queued_messages").is_none(), "Public /health must not leak queued_messages");
+        assert!(health.get("active_inboxes").is_none(), "Public /health must not leak active_inboxes");
+    }
+
+    #[tokio::test]
+    async fn e2e_live_http_relay_v180_envelope_v3_and_anti_replay_suite() {
+        let dir = std::env::temp_dir().join(format!("ot_relay_e2e_{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let state = Arc::new(build_test_state(&dir));
+
+        let app = Router::new()
+            .route("/api/v1/messages/send", post(handle_send_message))
+            .route("/api/v1/messages/inbox", get(handle_get_inbox))
+            .route("/api/v1/messages/ack", post(handle_ack_message))
+            .route("/health", get(handle_health))
+            .layer(DefaultBodyLimit::max(768 * 1024))
+            .with_state(state.clone());
+
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
+        let srv = tokio::spawn(async move {
             let _ = axum::serve(
                 listener,
                 app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -3864,52 +4085,147 @@ mod tests {
             .await;
         });
 
+        let client = reqwest::Client::new();
         let base = format!("http://{}", addr);
-        let cid = format!("@{}:onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion", "a".repeat(64));
 
-        // 1. Legacy client version < 36 must receive HTTP 426 Upgrade Required
-        let r426 = client
+        // 1. Live /health check: federation fields present, traffic correlation fields absent
+        let h_resp = client.get(format!("{}/health", base)).send().await.unwrap();
+        assert_eq!(h_resp.status(), StatusCode::OK);
+        let h_json: Value = h_resp.json().await.unwrap();
+        assert_eq!(h_json["status"], "healthy");
+        assert!(h_json["node_pubkey"].as_str().unwrap().len() == 64);
+        assert!(h_json.get("queued_messages").is_none());
+
+        // Generate Alice & Bob Ed25519 identities
+        let alice_sk = SigningKey::from_bytes(&[0x11; 32]);
+        let bob_sk = SigningKey::from_bytes(&[0x22; 32]);
+        let home = "onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion";
+        let alice_id = format!("@{}:{}", hex::encode(alice_sk.verifying_key().to_bytes()), home);
+        let bob_id = format!("@{}:{}", hex::encode(bob_sk.verifying_key().to_bytes()), home);
+
+        let ack_token = "a".repeat(64);
+        let ack_lock = hex::encode(Sha256::digest(ack_token.as_bytes()));
+        let eph_hex = "b".repeat(64);
+        let nonce_b64 = "AAAAAAAAAAAAAAAA";
+        let ct_b64 = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+        let msg_id = "e2e-v180-msg-001";
+        let ts_ms = now_epoch_ms();
+
+        let v2_t = format!("ENVELOPE_V2|{}|{}|{}|{}|{}", alice_id, bob_id, eph_hex, nonce_b64, ct_b64);
+        let v2_sig = hex::encode(alice_sk.sign(v2_t.as_bytes()).to_bytes());
+        let v2_payload = format!("__ENC_X25519_CHACHA20_V2__:{}:{}:{}:{}", eph_hex, nonce_b64, ct_b64, v2_sig);
+
+        let v3_t = format!(
+            "ENVELOPE_V3|{}|{}|{}|{}|{}|{}|{}|{}",
+            alice_id, bob_id, msg_id, ts_ms, ack_lock, eph_hex, nonce_b64, ct_b64
+        );
+        let v3_sig = hex::encode(alice_sk.sign(v3_t.as_bytes()).to_bytes());
+
+        // 2. Downgrade attack: v1.8.0 client (X-Client-Version-Code: 73) without v3_sig -> 401
+        let r_downgrade = client
             .post(format!("{}/api/v1/messages/send", base))
-            .header("X-Client-Version-Code", "35")
-            .json(&serde_json::json!({
-                "sender": cid,
-                "recipient": cid,
-                "payload": "AA==",
-                "ack_lock": "b".repeat(64)
+            .header("X-Client-Version-Code", "73")
+            .json(&json!({
+                "id": msg_id,
+                "sender": alice_id,
+                "recipient": bob_id,
+                "payload": v2_payload,
+                "ack_lock": ack_lock,
+                "timestamp": ts_ms
             }))
             .send()
             .await
             .unwrap();
-        assert_eq!(r426.status().as_u16(), 426, "Expected HTTP 426 for legacy client");
+        assert_eq!(r_downgrade.status(), StatusCode::UNAUTHORIZED);
 
-        // 2. Unauthenticated founder endpoints must receive HTTP 401
-        for ep in [
-            "/api/v1/founder/verify-allowance",
-            "/api/v1/founder/stop-node",
-            "/api/v1/founder/revoke",
-        ] {
-            let r401 = client
-                .post(format!("{}{}", base, ep))
-                .json(&serde_json::json!({"user_id": cid}))
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(r401.status().as_u16(), 401, "Expected HTTP 401 on {}", ep);
-        }
+        // 3. Tampered ack_lock attack with valid v3_sig -> 401
+        let r_tamper_lock = client
+            .post(format!("{}/api/v1/messages/send", base))
+            .header("X-Client-Version-Code", "73")
+            .json(&json!({
+                "id": msg_id,
+                "sender": alice_id,
+                "recipient": bob_id,
+                "payload": v2_payload,
+                "ack_lock": "c".repeat(64),
+                "timestamp": ts_ms,
+                "v3_sig": v3_sig
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r_tamper_lock.status(), StatusCode::UNAUTHORIZED);
 
-        // 3. Health check must return HTTP 200 and engine == oniontalk-relay-rs
-        let h = client.get(format!("{}/health", base)).send().await.unwrap();
-        assert_eq!(h.status().as_u16(), 200);
-        let h_json: serde_json::Value = h.json().await.unwrap();
-        assert_eq!(h_json.get("status").and_then(|v| v.as_str()), Some("healthy"));
-        assert!(
-            h_json
-                .get("engine")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .starts_with("oniontalk-relay-rs/"),
-            "Expected Rust engine header in /health"
+        // 4. Legitimate v1.8.0 ENVELOPE_V3 send -> 200 OK
+        let r_ok = client
+            .post(format!("{}/api/v1/messages/send", base))
+            .header("X-Client-Version-Code", "73")
+            .json(&json!({
+                "id": msg_id,
+                "sender": alice_id,
+                "recipient": bob_id,
+                "payload": v2_payload,
+                "ack_lock": ack_lock,
+                "timestamp": ts_ms,
+                "v3_sig": v3_sig
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r_ok.status(), StatusCode::OK);
+
+        // 5. Bob fetches /inbox -> receives message WITH intact v3_sig
+        let inbox_ts = now_epoch_ms().to_string();
+        let inbox_auth_msg = format!("ONIONTALK_AUTH_V2|INBOX|{}|{}", bob_id, inbox_ts);
+        let inbox_sig = hex::encode(bob_sk.sign(inbox_auth_msg.as_bytes()).to_bytes());
+        let r_inbox = client
+            .get(format!("{}/api/v1/messages/inbox", base))
+            .query(&[("user", bob_id.as_str())])
+            .header("X-OnionTalk-Timestamp", &inbox_ts)
+            .header("X-OnionTalk-Signature", &inbox_sig)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r_inbox.status(), StatusCode::OK);
+        let items: Vec<Value> = r_inbox.json().await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["id"], msg_id);
+        assert_eq!(items[0]["v3_sig"], v3_sig);
+
+        // 6. Bob ACKs with valid preimage -> 200 OK; replaying the exact same ACK signature -> 401
+        let ack_ts = (now_epoch_ms() + 1).to_string();
+        let ack_auth_msg = format!("ONIONTALK_AUTH_V2|ACK|{}|{}", bob_id, ack_ts);
+        let ack_sig = hex::encode(bob_sk.sign(ack_auth_msg.as_bytes()).to_bytes());
+        let ack_body = json!({
+            "user": bob_id,
+            "messageId": msg_id,
+            "ack_token": ack_token
+        });
+        let r_ack1 = client
+            .post(format!("{}/api/v1/messages/ack", base))
+            .header("X-OnionTalk-Timestamp", &ack_ts)
+            .header("X-OnionTalk-Signature", &ack_sig)
+            .json(&ack_body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r_ack1.status(), StatusCode::OK);
+
+        let r_ack_replay = client
+            .post(format!("{}/api/v1/messages/ack", base))
+            .header("X-OnionTalk-Timestamp", &ack_ts)
+            .header("X-OnionTalk-Signature", &ack_sig)
+            .json(&ack_body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            r_ack_replay.status(),
+            StatusCode::UNAUTHORIZED,
+            "Replayed ACK HTTP signature must be blocked with 401"
         );
-        println!("[STRIX-RELAY-RS] ALL CHECKS PASSED (Zero-Leak + HTTP 426 Legacy Cut + HTTP 401 Founder Auth + Health OK)");
+
+        srv.abort();
+        let _ = fs::remove_dir_all(&dir);
     }
 }

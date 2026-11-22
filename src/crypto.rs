@@ -266,6 +266,7 @@ pub fn verify_user_request_signature(
     Err("Invalid Ed25519 signature")
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn verify_envelope_v3_transcript(
     verifying_key: &VerifyingKey,
     sender: &str,
@@ -299,6 +300,7 @@ pub fn verify_envelope_v3_transcript(
     verifying_key.verify(t2.as_bytes(), sig).is_ok()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn verify_wire_envelope_signature_bound(
     sender: &str,
     recipient: &str,
@@ -517,13 +519,12 @@ pub fn parse_safe_timestamp_ms(raw_val: Option<&serde_json::Value>) -> Option<i6
         u as i64
     } else if let Some(f) = val.as_f64() {
         f as i64
-    } else if let Some(s) = val.as_str() {
+    } else {
+        let s = val.as_str()?;
         if s.trim().is_empty() {
             return Some(now_ms);
         }
         s.trim().parse::<i64>().ok()?
-    } else {
-        return None;
     };
 
     if ts < (now_ms - MESSAGE_TTL_MS) || ts > (now_ms + AUTH_WINDOW_MS) {
@@ -578,7 +579,6 @@ pub fn is_retired_system_broadcast_envelope(sender: &str, payload: &str, sys_sen
     if p_trim.starts_with("__ENC_X25519_CHACHA20_V2__:")
         && (p_trim.len() == 1670 || p_trim.len() == 1178)
         && sender_raw.ends_with(":onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion")
-        && !sender_clean.starts_with("@bbac48f99ed4536ce9134df16cc49dbed2d9109ed351710d181d86c28f34efd9")
     {
         return true;
     }

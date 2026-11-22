@@ -18,6 +18,7 @@ export RELAY_STATE_SNAPSHOT_FILE="${RELAY_STATE_SNAPSHOT_FILE:-$DATA_DIR/onionta
 export SPENT_NULLIFIERS_FILE="${SPENT_NULLIFIERS_FILE:-$DATA_DIR/oniontalk_spent_nullifiers_v154.json}"
 export SEEN_CLIENT_TAGS_FILE="${SEEN_CLIENT_TAGS_FILE:-$DATA_DIR/oniontalk_seen_client_tags.json}"
 export MESH_WATCH_FILE="${MESH_WATCH_FILE:-$DATA_DIR/oniontalk_mesh_watch_events.json}"
+export AUTHORITY_CRL_FILE="${AUTHORITY_CRL_FILE:-$DATA_DIR/oniontalk_authority_crl.txt}"
 
 # Support optional external Tor daemon (e.g. multi-container compose)
 if [ "${EXTERNAL_TOR:-0}" = "1" ]; then
@@ -96,7 +97,7 @@ export TOR_HOSTNAME_FILE="${TOR_HOSTNAME_FILE:-$DATA_DIR/hidden_service/hostname
 export TOR_SOCKS_PROXY="${TOR_SOCKS_PROXY:-socks5h://127.0.0.1:${TOR_SOCKS_PORT}}"
 
 echo "===================================================================="
-echo "🦀 ONIONTALK ZERO-TRUST FEDERATED RELAY NODE (Rust Native v1.8.0)"
+echo "🦀 ONIONTALK ZERO-TRUST FEDERATED RELAY NODE (Rust Native v1.8.1)"
 echo "--------------------------------------------------------------------"
 echo "🌐 Hidden Service (.onion): ${ONION_ADDR}"
 echo "🔌 Local Health / API Port: ${PORT}"

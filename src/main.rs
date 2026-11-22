@@ -86,6 +86,12 @@ pub struct UserMailbox {
     pub active_voice_streams: AtomicU64,
 }
 
+impl Default for UserMailbox {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UserMailbox {
     pub fn new() -> Self {
         Self {
@@ -141,6 +147,8 @@ struct RelaySnapshot {
     custom_peer_geo: HashMap<String, GeoMeta>,
     #[serde(default)]
     stats: HashMap<String, u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    authority_crl: Option<String>,
 }
 
 pub struct AppState {
@@ -190,6 +198,14 @@ pub struct AppState {
     pub revoked_founders: DashMap<String, ()>,
     pub founder_created_groups: DashMap<String, HashSet<String>>,
 
+    pub authority_crl_epoch: AtomicU64,
+    pub latest_authority_crl_token: RwLock<Option<String>>,
+    pub revoked_authority_pubkeys: RwLock<HashSet<String>>,
+    pub delegated_authority_pubkeys: RwLock<HashSet<String>>,
+    pub authority_crl_write_lock: Mutex<()>,
+    #[cfg(test)]
+    pub test_root_ca_pubkey: RwLock<Option<String>>,
+
     pub messages_received: AtomicU64,
     pub messages_routed: AtomicU64,
     pub acks_processed: AtomicU64,
@@ -207,6 +223,78 @@ impl AppState {
     pub fn inc_unauthenticated(&self) {
         self.unauthenticated_requests_blocked
             .fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn get_latest_authority_crl(&self) -> Option<String> {
+        self.latest_authority_crl_token
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    pub fn is_authority_revoked(&self, pubkey_hex: &str) -> bool {
+        let clean = pubkey_hex.trim().to_ascii_lowercase();
+        self.revoked_authority_pubkeys
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(&clean)
+    }
+
+    pub fn get_active_trusted_issuers(&self) -> Vec<String> {
+        let revoked = self
+            .revoked_authority_pubkeys
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        let delegated = self
+            .delegated_authority_pubkeys
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut active = Vec::new();
+        for &pk in crate::founder::OFFLINE_ROOT_CA_PUBKEYS
+            .iter()
+            .chain(crate::founder::OPERATIONAL_SUB_ISSUER_PUBKEYS.iter())
+        {
+            if !revoked.contains(pk) && !active.iter().any(|x| x == pk) {
+                active.push(pk.to_string());
+            }
+        }
+        for pk in delegated.iter() {
+            if !revoked.contains(pk) && !active.contains(pk) {
+                active.push(pk.clone());
+            }
+        }
+        active.sort();
+        active
+    }
+
+    pub fn is_trusted_authority_issuer(&self, issuer_pub: &str) -> bool {
+        let clean = issuer_pub.trim().to_ascii_lowercase();
+        if !is_lower_hex_len(&clean, 64) {
+            return false;
+        }
+        if self.is_authority_revoked(&clean) {
+            return false;
+        }
+        if crate::founder::OFFLINE_ROOT_CA_PUBKEYS.contains(&clean.as_str())
+            || crate::founder::OPERATIONAL_SUB_ISSUER_PUBKEYS.contains(&clean.as_str())
+        {
+            return true;
+        }
+        if self
+            .delegated_authority_pubkeys
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(&clean)
+        {
+            return true;
+        }
+        if std::env::var("RELAY_SANDBOX_MODE").as_deref() == Ok("1")
+            && std::env::var("ONIONTALK_TEST_GRANT_DONOR_10USD").as_deref() == Ok("1")
+            && constant_time_eq(clean.as_bytes(), self.node_public_key_hex.as_bytes())
+        {
+            return true;
+        }
+        false
     }
 
     pub fn allow_sender_rate(&self, sender_id: &str, is_voice: bool) -> bool {
@@ -1019,6 +1107,7 @@ impl AppState {
                 peer_rtt_ewma: p_rtt,
                 custom_peer_geo: c_geo,
                 stats: stats_map,
+                authority_crl: self.get_latest_authority_crl(),
             };
             if let Ok(json_str) = serde_json::to_string(&snap) {
                 let _ = write_file_atomic_0600(&self.state_snapshot_file, json_str.as_bytes());
@@ -1117,6 +1206,11 @@ impl AppState {
                             let mut list = mb.messages.lock().unwrap();
                             *list = msgs;
                         }
+                    }
+                    if let Some(ref crl_tok) = snap.authority_crl {
+                        let _ = crate::founder::verify_and_apply_authority_crl_internal(
+                            self, crl_tok, false,
+                        );
                     }
                 }
             }
@@ -1676,15 +1770,16 @@ async fn handle_sync_message(
         return (StatusCode::UNAUTHORIZED, Json(json!({"error": err_out})));
     }
 
-    if peer_res.is_err()
-        && !payload.starts_with("__ENC_X25519_CHACHA20_V2__:")
-        && !payload.starts_with("__ENC_X25519_CHACHA20_V3__:")
-    {
-        state.inc_unauthenticated();
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({"error": peer_res.unwrap_err()})),
-        );
+    if let Err(pe) = peer_res {
+        if !payload.starts_with("__ENC_X25519_CHACHA20_V2__:")
+            && !payload.starts_with("__ENC_X25519_CHACHA20_V3__:")
+        {
+            state.inc_unauthenticated();
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": pe})),
+            );
+        }
     }
 
     let is_voice_sync = data
@@ -1857,7 +1952,7 @@ async fn handle_ihave_digest_sync(
 fn claim_deliverable_messages(
     mailbox: &UserMailbox,
     is_voice_stream: bool,
-    is_active_call: bool,
+    _is_active_call: bool,
 ) -> Vec<Value> {
     let mut list = mailbox.messages.lock().unwrap();
     if list.is_empty() {
@@ -2213,7 +2308,7 @@ async fn handle_voice_stream(
 
         let window_ms = if is_active_call { 3200 } else { 3800 };
         let bounded_deadline = deadline.min(Instant::now() + Duration::from_millis(window_ms));
-        let mut delivered_batches = 0usize;
+        let _delivered_batches = 0usize;
         loop {
             let now = Instant::now();
             if now >= bounded_deadline {
@@ -2557,12 +2652,14 @@ async fn handle_ack_sync(
         *list = kept;
     }
 
-    if peer_res.is_err() && !verified_preimage {
-        state.inc_unauthenticated();
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({"error": peer_res.unwrap_err()})),
-        );
+    if let Err(pe) = peer_res {
+        if !verified_preimage {
+            state.inc_unauthenticated();
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": pe})),
+            );
+        }
     }
     (StatusCode::OK, Json(json!({"status": "ack_synced"})))
 }
@@ -2777,7 +2874,12 @@ async fn handle_announce_peer(
     if !BOOTSTRAP_SEEDS.contains(&peer_onion.as_str())
         && !static_node_geo_map().contains_key(peer_onion.as_str())
         && !announced_cert.is_empty()
-        && !crate::founder::verify_node_certificate(&peer_onion, &announced_pubkey, &announced_cert)
+        && !crate::founder::verify_node_certificate(
+            &state,
+            &peer_onion,
+            &announced_pubkey,
+            &announced_cert,
+        )
     {
         state.invalid_peers_blocked.fetch_add(1, Ordering::Relaxed);
         return (
@@ -3076,6 +3178,7 @@ async fn handle_list_peers(
                 "total_nodes": total_nodes,
                 "online_nodes": total_nodes,
                 "app_update": state.get_signed_app_update_metadata(),
+                "authority_crl": state.get_latest_authority_crl(),
             })),
         );
     }
@@ -3121,6 +3224,7 @@ async fn handle_list_peers(
             "peers_detail": peers_detail,
             "watch_events": watch_events,
             "app_update": state.get_signed_app_update_metadata(),
+            "authority_crl": state.get_latest_authority_crl(),
         })),
     )
 }
@@ -3218,7 +3322,7 @@ fn build_public_health_payload(state: &AppState) -> Value {
     // required by federated peer discovery (main.rs:844, 3505) while omitting active client/inbox queue counts.
     json!({
         "status": "healthy",
-        "engine": "oniontalk-relay-rs/1.8.0 (Rust Native Tokio/Axum + DashMap Zero-GIL)",
+        "engine": "oniontalk-relay-rs/1.8.1 (Rust Native Tokio/Axum + DashMap Zero-GIL)",
         "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-ENVELOPE_V3 + ACK-Lock + Anti-Sybil + S/Kademlia-GossipSub-v1.2",
         "routing_engine": "S/Kademlia-XOR + GossipSub-v1.2-IHAVE-IDONTWANT + Blinded-Poller-Affinity + Isochronous-Voice-Stream",
         "storage_engine": "persistent-atomic-0600-dashmap-ttl24h",
@@ -3733,16 +3837,14 @@ async fn main() {
         latest_client_version_code: std::env::var("LATEST_CLIENT_VERSION_CODE")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(73),
+            .unwrap_or(74),
         latest_client_version_name: std::env::var("LATEST_CLIENT_VERSION_NAME")
-            .unwrap_or_else(|_| "1.8.0".to_string()),
+            .unwrap_or_else(|_| "1.8.1".to_string()),
         update_play_url: std::env::var("UPDATE_PLAY_URL").unwrap_or_else(|_| {
             "https://play.google.com/store/apps/details?id=org.oniontalk.messenger".to_string()
         }),
-        update_apk_url: std::env::var("UPDATE_APK_URL").unwrap_or_else(|_| {
-            "https://github.com/onion-talk/oniontalk-demo/releases/latest/download/OnionTalk.apk"
-                .to_string()
-        }),
+        update_apk_url: std::env::var("UPDATE_APK_URL")
+            .unwrap_or_else(|_| "https://oniontalk.co".to_string()),
         enforce_hard_update_cut: std::env::var("ENFORCE_HARD_UPDATE_CUT").as_deref() != Ok("0"),
         start_time_sec: now_epoch_sec() - init_uptime_offset,
         state_snapshot_file: std::env::var("RELAY_STATE_SNAPSHOT_FILE")
@@ -3780,6 +3882,14 @@ async fn main() {
         founder_operator_nodes: DashMap::new(),
         revoked_founders: DashMap::new(),
         founder_created_groups: DashMap::new(),
+
+        authority_crl_epoch: AtomicU64::new(0),
+        latest_authority_crl_token: RwLock::new(None),
+        revoked_authority_pubkeys: RwLock::new(HashSet::new()),
+        delegated_authority_pubkeys: RwLock::new(HashSet::new()),
+        authority_crl_write_lock: Mutex::new(()),
+        #[cfg(test)]
+        test_root_ca_pubkey: RwLock::new(None),
 
         messages_received: AtomicU64::new(
             std::env::var("INIT_MSG_RECV")
@@ -3883,6 +3993,10 @@ async fn main() {
             "/api/v1/founder/revoke",
             post(founder::handle_founder_revoke),
         )
+        .route(
+            "/api/v1/authority/crl",
+            get(founder::handle_get_authority_crl).post(founder::handle_post_authority_crl),
+        )
         .route("/api/v1/peers/announce", post(handle_announce_peer))
         .route("/api/v1/peers/geo", post(handle_update_peer_geo))
         .route("/api/v1/peers/list", get(handle_list_peers))
@@ -3922,10 +4036,10 @@ async fn main() {
 }
 
 #[cfg(test)]
-mod relay_security_tests {
+pub(crate) mod relay_security_tests {
     use super::*;
 
-    fn build_test_state(base_dir: &Path) -> AppState {
+    pub(crate) fn build_test_state(base_dir: &Path) -> AppState {
         let sk = SigningKey::from_bytes(&[9u8; 32]);
         let pk_hex = hex::encode(sk.verifying_key().to_bytes());
         AppState {
@@ -3935,10 +4049,10 @@ mod relay_security_tests {
             my_onion_domain: RwLock::new(Some("onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion".to_string())),
             relay_admin_token: "test-admin-secret".to_string(),
             min_client_version_code: 56,
-            latest_client_version_code: 73,
-            latest_client_version_name: "1.8.0".to_string(),
+            latest_client_version_code: 74,
+            latest_client_version_name: "1.8.1".to_string(),
             update_play_url: "https://play.google.com".to_string(),
-            update_apk_url: "https://github.com/onion-talk/oniontalk-demo/releases/latest/download/OnionTalk.apk".to_string(),
+            update_apk_url: "https://oniontalk.co".to_string(),
             enforce_hard_update_cut: true,
             start_time_sec: now_epoch_sec() - 100,
             state_snapshot_file: base_dir.join("relay_state.json").to_string_lossy().to_string(),
@@ -3971,6 +4085,12 @@ mod relay_security_tests {
             founder_operator_nodes: DashMap::new(),
             revoked_founders: DashMap::new(),
             founder_created_groups: DashMap::new(),
+            authority_crl_epoch: AtomicU64::new(0),
+            latest_authority_crl_token: RwLock::new(None),
+            revoked_authority_pubkeys: RwLock::new(HashSet::new()),
+            delegated_authority_pubkeys: RwLock::new(HashSet::new()),
+            authority_crl_write_lock: Mutex::new(()),
+            test_root_ca_pubkey: RwLock::new(None),
             messages_received: AtomicU64::new(0),
             messages_routed: AtomicU64::new(0),
             acks_processed: AtomicU64::new(0),

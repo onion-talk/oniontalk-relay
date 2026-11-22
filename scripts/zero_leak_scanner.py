@@ -34,13 +34,30 @@ SECRET_AND_INFRA_PATTERNS = [
     ("STATIC_CI_PASSWORD", re.compile(r'CI_PASS\s*=\s*"[^"$]+"')),
     ("RFC1918_LAN_IP", re.compile(r"\b192\.168\.\d{1,3}\.\d{1,3}\b")),
     ("PODMAN_OR_VPN_IP", re.compile(r"\b(10\.88\.\d{1,3}\.\d{1,3}|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3})\b")),
-    ("CLOUD_OR_INFRA_LEAK", re.compile(r"\b(AWS EKS|Oracle Cloud|AWS Virginia|Google Cloud US-East|Render Cloud|Alibaba Cloud|Proxmox|OPNsense|Tonon-Vault|CyberVault)\b", re.IGNORECASE)),
+    ("CLOUD_OR_INFRA_LEAK", re.compile(r"\b(AWS EKS|Oracle Cloud|AWS Virginia|Google Cloud US-East|Render Cloud|Alibaba Cloud|Proxmox|OPNsense|Tonon-Vault|CyberVault|PVE2|PVE4|HOME_LAN_GATEWAYS|ROOT_ADMIN_GOD_MODE|password_verifier_hex)\b", re.IGNORECASE)),
 ]
 
 
+EXCLUDED_WALK_DIRS = {
+    ".git", "target", "build", ".gradle", ".cargo", ".cache", ".android-sdk",
+    "dist", "node_modules", "__pycache__", ".idea", ".kotlin", "keystore"
+}
+
+
 def get_tracked_files() -> list[str]:
-    out = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True, encoding="utf-8")
-    return [line.strip() for line in out.splitlines() if line.strip()]
+    try:
+        out = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True, encoding="utf-8")
+        return [line.strip() for line in out.splitlines() if line.strip()]
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        results: list[str] = []
+        for p in ROOT.rglob("*"):
+            if not p.is_file():
+                continue
+            rel = p.relative_to(ROOT)
+            if any(part in EXCLUDED_WALK_DIRS for part in rel.parts):
+                continue
+            results.append(rel.as_posix())
+        return sorted(results)
 
 
 def main() -> int:

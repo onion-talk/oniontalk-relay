@@ -15,9 +15,16 @@ LABEL org.opencontainers.image.title="OnionTalk Federated Relay Node (Rust Nativ
 LABEL org.opencontainers.image.description="Zero-Trust Tor v3 Hidden Service & E2EE Gossip Relay for OnionTalk Messenger (oniontalk-relay-rs)"
 LABEL org.opencontainers.image.authors="OnionTalk Core <security@oniontalk.org>"
 
-# Install Tor from GPG-verified Debian Bookworm repository + tini PID-1 reaper and create non-root UID 10014
+# Install GPG-verified Tor 0.4.9.x (Equi-X PoW enabled) from TorProject Bookworm repo + tini PID-1 reaper and non-root UID 10014
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    tor tor-geoipdb tini curl ca-certificates procps libcap2 \
+    gnupg gpgv apt-transport-https tini curl ca-certificates procps libcap2 \
+    && curl -fsSL https://deb.torproject.org/torproject.org/A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89.asc \
+       | gpg --dearmor -o /usr/share/keyrings/deb.torproject.org-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/deb.torproject.org-keyring.gpg] https://deb.torproject.org/torproject.org bookworm main" \
+       > /etc/apt/sources.list.d/tor.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+       tor deb.torproject.org-keyring tor-geoipdb \
+    && apt-get purge -y --auto-remove gnupg \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -g 10014 oniontalk \
     && useradd -u 10014 -g 10014 -d /data -s /usr/sbin/nologin -M oniontalk \

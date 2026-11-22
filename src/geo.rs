@@ -514,6 +514,7 @@ pub fn static_node_geo_map() -> &'static HashMap<&'static str, GeoMeta> {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_node_geo_detail(
     domain: &str,
     is_local: bool,

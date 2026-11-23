@@ -21,10 +21,13 @@ oniontalk-relay/
 ├── docker-compose.yml   # Container único All-in-One (Tor 0.4.9.14 oficial embutido + Rust Relay API)
 ├── Dockerfile           # Build multi-stage Rust 1.85 + Debian Bookworm + Tor Project 0.4.9.14
 ├── entrypoint.sh        # Inicializa /data/hidden_service (0700), sobe o daemon Tor v3 e o binário Rust
+├── docs/
+│   ├── PROTOCOL.md      # Especificação oficial do protocolo ENVELOPE_V3 (consolidada de oniontalk-protocol)
+│   └── MANIFESTO.md     # Manifesto arquitetural e engenharia anti-censura
 ├── src/
 │   ├── main.rs          # Motor de roteamento em RAM (DashMap Zero-GIL), GossipSub v1.2 e Stream de Voz
-│   ├── crypto.rs        # Verificação Ed25519, travas SHA-256 ACK e proteção anti-replay
-│   ├── founder.rs       # Governança FounderPass, cotações on-chain e vouchers de nó
+│   ├── crypto.rs        # Verificação Ed25519 ENVELOPE_V3, travas SHA-256 ACK e proteção anti-replay
+│   ├── founder.rs       # Offline Root CA PKI, listas de revogação otcrl1:, FounderPass e vouchers de nó
 │   └── geo.rs           # Topologia federada e metadados da malha
 └── README.md            # Guia de instalação e operação
 ```
@@ -46,16 +49,20 @@ Você só precisa ter instalado na máquina:
 
 ## 🚀 Release Oficial Atual & Malha Soberana em Rust — `ENVELOPE_V3` Pós-Quântico, Container Non-Root `UID 10014` & Malha Global Tor v3
 
-- **📦 Downloads Diretos Assinados & Imagens Oficiais (Sempre Sincronizados na Última Release)**:
+- **📦 Downloads Diretos Assinados, Especificação & Imagens Oficiais (Sempre Sincronizados na Última Release)**:
+  - **📜 Especificação do Protocolo & Manifesto**: [**`docs/PROTOCOL.md`**](./docs/PROTOCOL.md) · [**`docs/MANIFESTO.md`**](./docs/MANIFESTO.md) *(consolidados aqui após o arquivamento de `oniontalk-protocol`)*
   - **Main Messenger APK (`org.oniontalk.messenger`)**: [**Download `OnionTalk.apk` (latest)**](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/OnionTalk.apk) ![Latest Messenger Release](https://img.shields.io/github/v/release/onion-talk/oniontalk-demo?style=flat-square&label=release&color=00E5FF) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-demo/releases/latest/download/SHA256SUMS.txt))
   - **Standalone Android Relay Node APK (`org.oniontalk.relaynode`)**: [**Download `OnionTalk-RelayNode.apk` (latest)**](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/OnionTalk-RelayNode.apk) ![Latest Relay Release](https://img.shields.io/github/v/release/onion-talk/oniontalk-relay?style=flat-square&label=release&color=00E676) ([`SHA256SUMS.txt`](https://github.com/onion-talk/oniontalk-relay/releases/latest/download/SHA256SUMS.txt))
-  - **🦀 Container Oficial Relay Rust (`oniontalk-relay-rs`)**: [**`eriktonon/oniontalk:latest`**](https://hub.docker.com/r/eriktonon/oniontalk) ![Docker tag](https://img.shields.io/docker/v/eriktonon/oniontalk?sort=semver&label=tag&style=flat-square) (`UID 10014` non-root, `--cap-drop=ALL`, `tini`, `IntroDoS`).
+  - **🦀 Container Oficial Relay Rust (`oniontalk-relay-rs`)**: [**`eriktonon/oniontalk:latest`**](https://hub.docker.com/r/eriktonon/oniontalk) ![Docker tag](https://img.shields.io/docker/v/eriktonon/oniontalk?sort=semver&label=tag&style=flat-square) (`UID 10014` non-root, `--cap-drop=ALL`, `tini`, `IntroDoS`, Tor 0.4.9 Equi-X PoW).
+
+> **🔒 Aviso sobre o Código-Fonte (Disclaimer)**: Este servidor Relay em Rust (`oniontalk-relay`) e a especificação do protocolo [`ENVELOPE_V3`](./docs/PROTOCOL.md) são **open-source (MIT)**. O código-fonte dos aplicativos clientes (`org.oniontalk.messenger`, `onion-talk-web` e iOS) encontra-se **bloqueado/fechado temporariamente** durante o ciclo atual de hardening criptográfico e estabilização pré-auditoria.
+
 - **🛡️ Pilares Criptográficos & Roteamento P2P (`ENVELOPE_V3` • Hybrid PQC • Zero-Leak CI Verified)**:
-  1. **Hybrid Post-Quantum Cryptography (`__ENC_PQC_KYBER768_X25519_V3__` / `ENVELOPE_V3`)**: Combina **Dual X25519 ECDH** com **NIST FIPS 203 ML-KEM-768 (`Kyber-768`)** via `HKDF-SHA256` + `ChaCha20-Poly1305 AEAD` + assinaturas `Ed25519` com vínculo autenticado de `ack_lock` e proteção anti-replay.
+  1. **Hybrid Post-Quantum Cryptography (`__ENC_X25519_CHACHA20_V3__` + `ML-KEM-768`)**: Combina **Dual X25519 ECDH** com **NIST FIPS 203 ML-KEM-768 (`Kyber-768`, `OT_PQC_CAPSULE_V2`)** via `HKDF-SHA256` + `ChaCha20-Poly1305 AEAD` + assinaturas `Ed25519` com vínculo autenticado de `msgId`, `timestamp` e `ack_lock`.
   2. **Ultra-Fast E2E Delivery (`1.13s – 1.24s`)**: **Dual Warm Socket Pool** (`minWarmSockets = 2` por gateway `.onion`, `0ms` de handshake SOCKS5) aliado a *Hedged Send* especulativo em `250ms`.
-  3. **S/Kademlia XOR Distance Routing & Blinded Poller Affinity**: Os nós `.onion` v3 da malha global roteiam por distância XOR (`SHA-256(peer_onion) ^ SHA-256(recipient_hash)`) com afinidade cega em RAM (`active_pollers`, `TTL 90s`, zero logs).
-  4. **GossipSub v1.2 `IHAVE` / `IDONTWANT` Deduplication**: Os relays anunciam metadados `POST /gossip/ihave` antes de encaminhar payloads `> 1024 bytes`, reduzindo o tráfego redundante na malha Tor em **~70%**.
-  5. **Continuous `10s–12s` Long-Polling & Mandatory `SHA-256` Media Integrity**: Elimina janelas mortas entre ciclos de escuta e verifica hashes Merkle `SHA-256` em áudios, imagens e anexos antes da renderização.
+  3. **S/Kademlia XOR Distance Routing, Blinded Poller Affinity & Equi-X PoW**: Os nós `.onion` v3 da malha global roteiam por distância XOR (`SHA-256(peer_onion) ^ SHA-256(recipient_hash)`) com afinidade cega em RAM (`active_pollers`, `TTL 90s`, zero logs) e defesa anti-DoS **Tor 0.4.9 Equi-X PoW**.
+  4. **GossipSub v1.2 `IHAVE` / `IDONTWANT` Deduplication**: Os relays anunciam metadados `POST /api/v1/messages/ihave` antes de encaminhar payloads `> 1024 bytes`, reduzindo o tráfego redundante na malha Tor em **~70%**.
+  5. **Offline Root CAs (`otcrl1:`) & Mandatory `SHA-256` Media Integrity**: Governança por raízes offline pinadas com listas assinadas de revogação `otcrl1:` e verificação de hashes Merkle `SHA-256` em áudios, imagens e anexos antes da renderização.
 
 ---
 ## 🚀 Passo a Passo: Subindo seu Servidor (1 Comando)
@@ -166,7 +173,7 @@ A chave privada do endereço `.onion` do seu servidor fica salva automaticamente
 
 ## ⚠️ Legal Disclaimers, Limitation of Liability & Sovereign Terms of Use
 
-1. **"AS IS" Open-Source Provision & Cryptographic Research Purpose**: OnionTalk (`org.oniontalk.messenger`), OnionTalk Relay Node (`org.oniontalk.relaynode`), and the Desktop/Web Container (`oniontalk-web`) are distributed strictly **"AS IS"**, without warranties of any kind under the MIT License, as cryptographic engineering and digital privacy technology (`Privacy by Design`).
+1. **"AS IS" Provision, Open-Source Relay & Temporarily Restricted Client Source**: Este servidor Relay em Rust (`oniontalk-relay`) e a especificação do protocolo [`ENVELOPE_V3`](./docs/PROTOCOL.md) são open-source sob licença MIT. O código-fonte dos aplicativos clientes (`org.oniontalk.messenger`, `onion-talk-web` e iOS) encontra-se **bloqueado/fechado temporariamente** durante a fase atual de hardening e estabilização pré-auditoria. Todos os binários e containers são distribuídos estritamente **"AS IS"**, sem garantias de qualquer tipo, como tecnologia de engenharia criptográfica e privacidade digital (`Privacy by Design`).
 2. **Irreversible Zero-Knowledge Custody (No Password Recovery)**: Because OnionTalk operates without central servers, user accounts, emails, or phone numbers, **the developers cannot recover forgotten vault passwords, restore lost private keys, or reverse the 5-Strike Anti-Coercion Wipe (`DoD 5220.22-M`) or Synchronized Bilateral Burn (`🔥`)**. Users are solely responsible for safeguarding their local credentials and backups.
 3. **Blind Common-Carrier Relay Safe Harbor**: Federated `.onion` v3 relay nodes act strictly as **blind, non-custodial encrypted envelope routers**. Relays possess neither the private `X25519` keys nor the post-quantum `ML-KEM-768` decapsulation keys required to inspect, filter, or modify message contents, and expose only deterministic synthetic topology coordinates (`Zero IP / Zero Cloud Provider Leak`).
 4. **Lawful Use & User Responsibility**: Users assume full and exclusive legal responsibility for their use of the software in their respective jurisdictions. Using OnionTalk for unlawful activities is strictly prohibited by the project's terms of use.

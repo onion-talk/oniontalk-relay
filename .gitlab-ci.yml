@@ -7,9 +7,56 @@ strix_relay_rust_gate:
     name: rust:slim-bookworm
     pull_policy: [if-not-present, always]
   variables:
-    CARGO_HOME: "/cache/cargo-relay"
+    CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+  cache:
+    key: "oniontalk-relay-cargo-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .cargo/
   script:
-    - command -v cc >/dev/null 2>&1 || (apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev git pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*)
+    - apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev git pkg-config libssl-dev ca-certificates python3 && rm -rf /var/lib/apt/lists/*
+    - python3 scripts/zero_leak_scanner.py
+    - |
+      python3 - <<'PY'
+      import json, os, pathlib, re, sys, urllib.request
+      lock_path = pathlib.Path("Cargo.lock")
+      if not lock_path.exists():
+          print("[OSV-GATE] Missing Cargo.lock", file=sys.stderr)
+          sys.exit(1)
+      pkgs = list(dict.fromkeys(re.findall(r'\[\[package\]\]\s+name\s*=\s*"([^"]+)"\s+version\s*=\s*"([^"]+)"', lock_path.read_text("utf-8"))))
+      if not pkgs:
+          print("[OSV-GATE] 0 packages parsed from Cargo.lock", file=sys.stderr)
+          sys.exit(1)
+      if os.environ.get("STRIX_OFFLINE_AIRGAP") == "1":
+          print(f"[OSV-GATE] STRIX_OFFLINE_AIRGAP=1 set; skipped {len(pkgs)} crates")
+          sys.exit(0)
+      cache, blocking = {}, []
+      for i in range(0, len(pkgs), 500):
+          chunk = pkgs[i:i+500]
+          body = json.dumps({"queries": [{"package": {"name": n, "ecosystem": "crates.io"}, "version": v} for n, v in chunk]}).encode()
+          req = urllib.request.Request("https://api.osv.dev/v1/querybatch", data=body, method="POST", headers={"Content-Type": "application/json", "User-Agent": "oniontalk-relay-osv-gate/1.0"})
+          resp = json.loads(urllib.request.urlopen(req, timeout=20).read().decode())
+          for (n, v), r in zip(chunk, resp.get("results") or []):
+              for ve in r.get("vulns") or []:
+                  vid = ve.get("id", "")
+                  if vid not in cache:
+                      cache[vid] = json.loads(urllib.request.urlopen(f"https://api.osv.dev/v1/vulns/{vid}", timeout=15).read().decode())
+                  doc = cache[vid]
+                  aliases = [str(a) for a in (doc.get("aliases") or [])]
+                  has_cve = vid.startswith(("CVE-", "GHSA-")) or any(a.startswith(("CVE-", "GHSA-")) for a in aliases)
+                  dbs_list = [(a.get("database_specific") or {}) for a in (doc.get("affected") or [])]
+                  info_tags = {str(d["informational"]).lower() for d in dbs_list if d.get("informational")}
+                  cats = {str(c).lower() for d in dbs_list for c in (d.get("categories") or [])}
+                  has_cvss = any(bool(d.get("cvss")) for d in dbs_list)
+                  slc = str(doc.get("summary") or "").lower()
+                  if not has_cve and not doc.get("severity") and not has_cvss and not cats and (info_tags == {"unmaintained"} or (not info_tags and ("is unmaintained" in slc or "no longer maintained" in slc))):
+                      continue
+                  blocking.append(f"{n}@{v} -> {vid} ({','.join(aliases) or doc.get('summary', 'security-advisory')})")
+      if blocking:
+          for b in blocking:
+              print(f"[OSV-GATE] BLOCKED: {b}", file=sys.stderr)
+          sys.exit(1)
+      print(f"[OSV-GATE] PASS: {len(pkgs)} crates in Cargo.lock verified clean via OSV.dev")
+      PY
     - cargo test --release --locked -- --nocapture
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"

@@ -3322,7 +3322,7 @@ fn build_public_health_payload(state: &AppState) -> Value {
     // required by federated peer discovery (main.rs:844, 3505) while omitting active client/inbox queue counts.
     json!({
         "status": "healthy",
-        "engine": "oniontalk-relay-rs/1.8.1 (Rust Native Tokio/Axum + DashMap Zero-GIL)",
+        "engine": "oniontalk-relay-rs/1.8.2 (Rust Native Tokio/Axum + DashMap Zero-GIL)",
         "zero_trust_mode": "X25519-ChaCha20-Poly1305 + Ed25519-ENVELOPE_V3 + ACK-Lock + Anti-Sybil + S/Kademlia-GossipSub-v1.2",
         "routing_engine": "S/Kademlia-XOR + GossipSub-v1.2-IHAVE-IDONTWANT + Blinded-Poller-Affinity + Isochronous-Voice-Stream",
         "storage_engine": "persistent-atomic-0600-dashmap-ttl24h",
@@ -3837,9 +3837,9 @@ async fn main() {
         latest_client_version_code: std::env::var("LATEST_CLIENT_VERSION_CODE")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(74),
+            .unwrap_or(75),
         latest_client_version_name: std::env::var("LATEST_CLIENT_VERSION_NAME")
-            .unwrap_or_else(|_| "1.8.1".to_string()),
+            .unwrap_or_else(|_| "1.8.2".to_string()),
         update_play_url: std::env::var("UPDATE_PLAY_URL").unwrap_or_else(|_| {
             "https://play.google.com/store/apps/details?id=org.oniontalk.messenger".to_string()
         }),
@@ -4049,8 +4049,8 @@ pub(crate) mod relay_security_tests {
             my_onion_domain: RwLock::new(Some("onion4zr3bsdeaelksemwokl5qmxd5o7jyblf46vc2mfl6cozgw77tqd.onion".to_string())),
             relay_admin_token: "test-admin-secret".to_string(),
             min_client_version_code: 56,
-            latest_client_version_code: 74,
-            latest_client_version_name: "1.8.1".to_string(),
+            latest_client_version_code: 75,
+            latest_client_version_name: "1.8.2".to_string(),
             update_play_url: "https://play.google.com".to_string(),
             update_apk_url: "https://oniontalk.co".to_string(),
             enforce_hard_update_cut: true,

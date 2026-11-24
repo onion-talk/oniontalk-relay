@@ -16,7 +16,7 @@ LABEL org.opencontainers.image.description="Zero-Trust Tor v3 Hidden Service & E
 LABEL org.opencontainers.image.authors="OnionTalk Core <security@oniontalk.org>"
 
 # Install GPG-verified Tor 0.4.9.x (Equi-X PoW enabled) from TorProject Bookworm repo + tini PID-1 reaper and non-root UID 10014
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
     gnupg gpgv apt-transport-https tini curl ca-certificates procps libcap2 \
     && curl -fsSL https://deb.torproject.org/torproject.org/A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89.asc \
        | gpg --dearmor -o /usr/share/keyrings/deb.torproject.org-keyring.gpg \
